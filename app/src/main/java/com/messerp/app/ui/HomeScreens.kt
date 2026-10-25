@@ -1,16 +1,22 @@
 package com.messerp.app.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -26,7 +32,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.messerp.app.data.Profile
 import com.messerp.app.data.Role
 
@@ -37,132 +46,199 @@ private fun roleLabel(r: Role) = when (r) {
 }
 
 @Composable
-fun HeaderBar(title: String, subtitle: String, onProfile: (() -> Unit)? = null) {
+fun HeaderBar(title: String, subtitle: String) {
     Surface(color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(subtitle, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.bodySmall)
-                Text(title, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.titleLarge)
-            }
-            if (onProfile != null) {
-                TextButton(onClick = onProfile) { Text("প্রোফাইল", color = MaterialTheme.colorScheme.onPrimary) }
-            }
+        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+            Text(subtitle, color = MaterialTheme.colorScheme.onPrimary, fontSize = 13.sp)
+            Text(title, color = MaterialTheme.colorScheme.onPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
 
 @Composable
-fun InfoCard(title: String, lines: List<String>) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            lines.forEach { Text(it) }
-        }
+fun AppScaffold(vm: AppViewModel, active: Int, title: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        HeaderBar(title, subtitle)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            content = content
+        )
+        BottomBar(active, { vm.go(Screen.Home) }, { vm.go(Screen.ProfileScreen) }, { vm.comingSoon() })
     }
 }
 
 @Composable
 fun HomeScreen(vm: AppViewModel) {
     val p = vm.profile ?: return
-    Column(modifier = Modifier.fillMaxSize()) {
-        val title = when (p.role) {
-            Role.MEMBER -> p.fullName
-            Role.ADMIN -> "অ্যাডমিন ড্যাশবোর্ড"
-            Role.MAIN_ADMIN -> "মূল অ্যাডমিন ড্যাশবোর্ড"
+    val title = when (p.role) {
+        Role.MEMBER -> p.fullName
+        Role.ADMIN -> "ম্যানেজার ড্যাশবোর্ড"
+        Role.MAIN_ADMIN -> "নিয়ন্ত্রণ কেন্দ্র"
+    }
+    val subtitle = when (p.role) {
+        Role.MEMBER -> "আসসালামু আলাইকুম"
+        Role.ADMIN -> "অ্যাডমিন প্যানেল"
+        Role.MAIN_ADMIN -> "মূল অ্যাডমিন"
+    }
+    AppScaffold(vm, 0, title, subtitle) {
+        MessageText(vm)
+        when (p.role) {
+            Role.MEMBER -> MemberContent(vm)
+            Role.ADMIN -> AdminContent(vm, p, false)
+            Role.MAIN_ADMIN -> AdminContent(vm, p, true)
         }
-        HeaderBar(title, "আসসালামু আলাইকুম, ${p.fullName}") { vm.go(Screen.ProfileScreen) }
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            MessageText(vm)
-            InfoCard(
-                "আমার তথ্য",
-                listOf(
-                    "সদস্য আইডি: ${p.memberCode}",
-                    "রোল: ${roleLabel(p.role)}",
-                    "রুম: ${p.roomNo ?: "নির্ধারিত নয়"}, সিট: ${p.seatNo ?: "নির্ধারিত নয়"}",
-                    "যোগদান: ${p.joinDate}",
-                    if (p.isCurrentManager) "আপনি বর্তমান ম্যানেজার" else "বর্তমান ম্যানেজার নন"
-                )
-            )
-            InfoCard(
-                "আসছে পরের ধাপে",
-                listOf("ব্যালেন্স ও বাকি, মিল ও চাল, বিল ও রসিদ, ডিউটি, নোটিশ ও চ্যাট। এই ধাপে এগুলোর কোনো সংখ্যা দেখানো হচ্ছে না।")
-            )
-            if (p.role != Role.MEMBER) AdminPanel(vm, p)
-        }
+        MyInfoCard(p)
+    }
+}
+
+@Composable
+fun MyInfoCard(p: Profile) {
+    AppCard {
+        Text("আমার তথ্য", fontWeight = FontWeight.Bold)
+        KeyValue("সদস্য আইডি", p.memberCode)
+        KeyValue("রোল", roleLabel(p.role))
+        KeyValue("রুম / সিট", "${p.roomNo ?: "—"} / ${p.seatNo ?: "—"}")
+        KeyValue("যোগদান", p.joinDate)
+        KeyValue("ম্যানেজার", if (p.isCurrentManager) "হ্যাঁ" else "না")
+    }
+}
+
+@Composable
+fun MemberContent(vm: AppViewModel) {
+    val soon = { vm.comingSoon() }
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        StatCard("আমার ব্যালেন্স", "—", Modifier.weight(1f), "পরের ধাপে চালু হবে")
+        StatCard("মোট বাকি", "—", Modifier.weight(1f), "পরের ধাপে চালু হবে")
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        StatusChip("মিল: শীঘ্রই")
+        StatusChip("চাল: শীঘ্রই")
+        StatusChip("জরিমানা: শীঘ্রই")
+    }
+    TileGrid(
+        listOf(
+            Tile("আমার ব্যালেন্স", false, soon),
+            Tile("মিল অন/অফ", false, soon),
+            Tile("চাল", false, soon),
+            Tile("স্বচ্ছতা", false, soon),
+            Tile("পেমেন্ট ও রসিদ", false, soon),
+            Tile("ডিউটি", false, soon)
+        )
+    )
+    AppCard {
+        Text("সর্বশেষ নোটিশ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("নোটিশ সুবিধা পরের ধাপে আসছে।", fontWeight = FontWeight.SemiBold)
     }
 }
 
 private class Pending(val target: Profile, val role: Role?, val status: String?, val label: String)
 
 @Composable
-fun AdminPanel(vm: AppViewModel, me: Profile) {
-    val isMain = me.role == Role.MAIN_ADMIN
+fun ControlRow(title: String, onClick: () -> Unit) {
+    AppCard(modifier = Modifier.clickable(onClick = onClick)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text("শীঘ্রই", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
+    val soon = { vm.comingSoon() }
     var pending by remember { mutableStateOf<Pending?>(null) }
+    val active = vm.members.count { it.isActive }
 
-    InfoCard("সারাংশ", listOf("মোট সদস্য: ${vm.members.size}"))
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        StatCard("সক্রিয় সদস্য", "$active", Modifier.weight(1f))
+        StatCard("মোট সদস্য", "${vm.members.size}", Modifier.weight(1f))
+    }
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        StatCard("মিল অনুরোধ", "—", Modifier.weight(1f), "শীঘ্রই")
+        StatCard("মোট বকেয়া", "—", Modifier.weight(1f), "শীঘ্রই")
+    }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("ইনভাইট কোড", style = MaterialTheme.typography.titleMedium)
-            vm.lastInvite?.let { Text("সর্বশেষ কোড: $it", style = MaterialTheme.typography.titleMedium) }
-            Button(onClick = { vm.createInvite(Role.MEMBER) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) {
-                Text("নতুন সদস্যের কোড তৈরি")
-            }
-            if (isMain) {
-                OutlinedButton(onClick = { vm.createInvite(Role.ADMIN) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) {
-                    Text("নতুন অ্যাডমিনের কোড তৈরি")
-                }
-            }
+    SectionTitle("দ্রুত কাজ")
+    val tiles = mutableListOf(Tile("নতুন সদস্যের কোড", !vm.busy) { vm.createInvite(Role.MEMBER) })
+    if (isMain) tiles.add(Tile("নতুন অ্যাডমিনের কোড", !vm.busy) { vm.createInvite(Role.ADMIN) })
+    tiles.add(Tile("পেমেন্ট লিখুন", false, soon))
+    tiles.add(Tile("খরচ যোগ করুন", false, soon))
+    tiles.add(Tile("মিল ও চাল", false, soon))
+    tiles.add(Tile("নোটিশ দিন", false, soon))
+    TileGrid(tiles)
+
+    vm.lastInvite?.let { code ->
+        AppCard {
+            Text("সর্বশেষ ইনভাইট কোড", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(code, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Text("৭ দিন বৈধ, একবারই ব্যবহার করা যাবে।", fontSize = 12.sp)
         }
     }
 
     if (isMain) {
-        Card(modifier = Modifier.fillMaxWidth()) {
+        AppCard {
             Row(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("লিডারবোর্ড", style = MaterialTheme.typography.titleMedium)
-                    Text(if (vm.leaderboard) "চালু" else "বন্ধ")
+                    Text("লিডারবোর্ড", fontWeight = FontWeight.Bold)
+                    Text(if (vm.leaderboard) "চালু" else "বন্ধ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Switch(checked = vm.leaderboard, onCheckedChange = { vm.toggleLeaderboard(it) }, enabled = !vm.busy)
             }
         }
+        SectionTitle("নিয়ন্ত্রণ")
+        ControlRow("অ্যাডমিনের অনুমতি", soon)
+        ControlRow("বকেয়ার সীমা ও মিল নীতি", soon)
+        ControlRow("ম্যানেজার রোটেশন", soon)
+        ControlRow("অডিট লগ", soon)
+        ControlRow("CSV রিপোর্ট", soon)
+        ControlRow("নিরাপত্তা সেটিংস", soon)
+    } else {
+        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(12.dp)) {
+            Text(
+                "অ্যাডমিন রোল বদল ও নিরাপত্তা সেটিংস শুধু মূল অ্যাডমিন করতে পারেন।",
+                modifier = Modifier.padding(12.dp),
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
     }
 
-    Text("সদস্য তালিকা", style = MaterialTheme.typography.titleMedium)
+    SectionTitle("সদস্য তালিকা")
     vm.members.forEach { m ->
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("${m.fullName} (${m.memberCode})", style = MaterialTheme.typography.titleSmall)
-                Text("${roleLabel(m.role)} · ${if (m.isActive) "সক্রিয়" else "স্থগিত"} · ${m.phone}")
-                val canStatus = m.id != me.id && m.role != Role.MAIN_ADMIN && (isMain || m.role == Role.MEMBER)
-                val canRole = isMain && m.id != me.id && m.role != Role.MAIN_ADMIN
-                if (canStatus || canRole) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (canRole) {
-                            val target = if (m.role == Role.MEMBER) Role.ADMIN else Role.MEMBER
-                            OutlinedButton(onClick = { pending = Pending(m, target, null, "রোল: ${roleLabel(target)}") }) {
-                                Text(if (target == Role.ADMIN) "অ্যাডমিন করুন" else "সদস্য করুন")
-                            }
+        AppCard {
+            Text("${m.fullName} (${m.memberCode})", fontWeight = FontWeight.Bold)
+            Text(m.phone, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 4.dp)) {
+                StatusChip(roleLabel(m.role), positive = m.role != Role.MEMBER)
+                StatusChip(if (m.isActive) "সক্রিয়" else "স্থগিত", positive = m.isActive)
+            }
+            val canStatus = m.id != me.id && m.role != Role.MAIN_ADMIN && (isMain || m.role == Role.MEMBER)
+            val canRole = isMain && m.id != me.id && m.role != Role.MAIN_ADMIN
+            if (canStatus || canRole) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (canRole) {
+                        val target = if (m.role == Role.MEMBER) Role.ADMIN else Role.MEMBER
+                        OutlinedButton(onClick = { pending = Pending(m, target, null, "রোল: ${roleLabel(target)}") }) {
+                            Text(if (target == Role.ADMIN) "অ্যাডমিন করুন" else "সদস্য করুন")
                         }
-                        if (canStatus) {
-                            val next = if (m.isActive) "SUSPENDED" else "ACTIVE"
-                            OutlinedButton(onClick = { pending = Pending(m, null, next, if (m.isActive) "স্থগিত" else "সক্রিয়") }) {
-                                Text(if (m.isActive) "স্থগিত করুন" else "সক্রিয় করুন")
-                            }
+                    }
+                    if (canStatus) {
+                        val next = if (m.isActive) "SUSPENDED" else "ACTIVE"
+                        OutlinedButton(onClick = { pending = Pending(m, null, next, if (m.isActive) "স্থগিত করুন" else "সক্রিয় করুন") }) {
+                            Text(if (m.isActive) "স্থগিত করুন" else "সক্রিয় করুন")
                         }
                     }
                 }
@@ -197,30 +273,44 @@ fun AdminPanel(vm: AppViewModel, me: Profile) {
 fun ProfileScreen(vm: AppViewModel) {
     val p = vm.profile ?: return
     var name by rememberSaveable(p.id) { mutableStateOf(p.fullName) }
-    Column(modifier = Modifier.fillMaxSize()) {
-        HeaderBar("প্রোফাইল", p.memberCode)
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            InfoCard(
-                "তথ্য",
-                listOf(
-                    "ফোন: ${p.phone}",
-                    "রোল: ${roleLabel(p.role)}",
-                    "অবস্থা: ${if (p.isActive) "সক্রিয়" else "স্থগিত"}",
-                    "রুম: ${p.roomNo ?: "নির্ধারিত নয়"}, সিট: ${p.seatNo ?: "নির্ধারিত নয়"}",
-                    "যোগদান: ${p.joinDate}"
+    AppScaffold(vm, 3, "প্রোফাইল", "আমার তথ্য") {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Box(
+                modifier = Modifier.size(72.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    p.fullName.take(1).uppercase(),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold
                 )
-            )
-            Field("নাম", name, { name = it })
-            MessageText(vm)
-            Button(onClick = { vm.saveName(name) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) { Text("নাম সংরক্ষণ") }
-            OutlinedButton(onClick = { vm.go(Screen.Home) }, modifier = Modifier.fillMaxWidth()) { Text("ফিরে যান") }
-            OutlinedButton(onClick = { vm.logout() }, modifier = Modifier.fillMaxWidth()) { Text("লগআউট") }
+            }
+            Column {
+                Text(p.fullName, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("সদস্য আইডি: ${p.memberCode}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
+        AppCard {
+            KeyValue("ফোন", p.phone)
+            KeyValue("রুম নং", p.roomNo ?: "—")
+            KeyValue("সিট নং", p.seatNo ?: "—")
+            KeyValue("যোগদান", p.joinDate)
+            KeyValue("অবস্থা", if (p.isActive) "সক্রিয়" else "স্থগিত")
+            KeyValue("রোল", roleLabel(p.role))
+            KeyValue("বর্তমান ম্যানেজার", if (p.isCurrentManager) "হ্যাঁ" else "না")
+        }
+        Field("নাম", name, { name = it })
+        MessageText(vm)
+        PrimaryButton("নাম সংরক্ষণ", !vm.busy) { vm.saveName(name) }
+        SectionTitle("সেটিংস")
+        ControlRow("ভাষা (বাংলা / English)") { vm.comingSoon() }
+        ControlRow("থিম") { vm.comingSoon() }
+        OutlinedButton(
+            onClick = { vm.logout() },
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("লগআউট", fontWeight = FontWeight.Bold) }
     }
 }

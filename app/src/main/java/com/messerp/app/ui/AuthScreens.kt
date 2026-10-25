@@ -9,14 +9,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -26,10 +27,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.messerp.app.BuildConfig
 
 @Composable
@@ -38,17 +41,22 @@ fun Field(
     value: String,
     onChange: (String) -> Unit,
     keyboard: KeyboardType = KeyboardType.Text,
-    password: Boolean = false
+    password: Boolean = false,
+    hint: String = ""
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onChange,
-        label = { Text(label) },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-        keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else keyboard),
-        visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None
-    )
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        OutlinedTextField(
+            value = value,
+            onValueChange = onChange,
+            placeholder = { if (hint.isNotEmpty()) Text(hint) },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else keyboard),
+            visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None
+        )
+    }
 }
 
 @Composable
@@ -61,15 +69,33 @@ fun MessageText(vm: AppViewModel) {
 }
 
 @Composable
+fun PrimaryButton(text: String, enabled: Boolean, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().height(52.dp)
+    ) { Text(text, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+}
+
+@Composable
+fun SecondaryButton(text: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().height(48.dp)
+    ) { Text(text, fontWeight = FontWeight.SemiBold) }
+}
+
+@Composable
 fun AuthColumn(content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp),
+            .padding(horizontal = 24.dp, vertical = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Spacer(Modifier.height(24.dp))
         content()
     }
 }
@@ -81,11 +107,14 @@ fun SplashScreen(vm: AppViewModel) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        LogoMark(72.dp)
+        Spacer(Modifier.height(24.dp))
         if (vm.busy) {
             CircularProgressIndicator()
         } else {
             MessageText(vm)
-            Button(onClick = { vm.restore() }) { Text("আবার চেষ্টা করুন") }
+            Spacer(Modifier.height(12.dp))
+            Button(onClick = { vm.restore() }, shape = RoundedCornerShape(12.dp)) { Text("আবার চেষ্টা করুন") }
         }
     }
 }
@@ -97,35 +126,46 @@ fun LoginScreen(vm: AppViewModel, adminMode: Boolean) {
     var taps by remember { mutableIntStateOf(0) }
 
     AuthColumn {
+        Spacer(Modifier.height(24.dp))
+        LogoMark()
         Text(
-            if (adminMode) "অ্যাডমিন লগইন" else "Smart Mess",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.primary
+            if (adminMode) "অ্যাডমিন লগইন" else "স্মার্ট ট্রান্সপারেন্ট\nমেস",
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+            lineHeight = 32.sp
         )
-        if (!adminMode) Text("স্বচ্ছ হিসাব, সবার জন্য")
+        Text(
+            if (adminMode) "সার্ভার আপনার রোল যাচাই করবে।" else "স্বচ্ছ হিসাব, সবার জন্য",
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         if (!vm.configured) {
             Text("ব্যাকএন্ড কনফিগার করা নেই (SUPABASE_URL ও SUPABASE_ANON_KEY প্রয়োজন)।", color = MaterialTheme.colorScheme.error)
         }
-        Field("ফোন নম্বর", phone, { phone = it }, KeyboardType.Phone)
-        Field("পাসওয়ার্ড", password, { password = it }, password = true)
+        Spacer(Modifier.height(8.dp))
+        Field("ফোন নম্বর", phone, { phone = it }, KeyboardType.Phone, hint = "01XXXXXXXXX")
+        Field("পাসওয়ার্ড", password, { password = it }, password = true, hint = "••••••••")
         MessageText(vm)
-        Button(
-            onClick = { vm.login(phone, password, adminMode) },
+        PrimaryButton(
+            text = if (vm.busy) "অপেক্ষা করুন..." else if (adminMode) "অ্যাডমিন হিসেবে প্রবেশ" else "লগইন",
             enabled = !vm.busy,
-            modifier = Modifier.fillMaxWidth()
-        ) { Text(if (vm.busy) "অপেক্ষা করুন..." else if (adminMode) "অ্যাডমিন হিসেবে প্রবেশ" else "লগইন") }
+            onClick = { vm.login(phone, password, adminMode) }
+        )
         if (adminMode) {
-            TextButton(onClick = { vm.go(Screen.Login) }) { Text("সাধারণ লগইনে ফিরুন") }
+            SecondaryButton("সাধারণ লগইনে ফিরুন") { vm.go(Screen.Login) }
         } else {
-            TextButton(onClick = { vm.go(Screen.Register) }) { Text("ইনভাইট কোড দিয়ে যোগ দিন") }
             Text(
-                "পাসওয়ার্ড ভুলে গেলে অ্যাডমিনের সঙ্গে যোগাযোগ করুন।",
-                style = MaterialTheme.typography.bodySmall
+                "পাসওয়ার্ড ভুলে গেলে অ্যাডমিনকে বলুন, তিনি সাহায্য করবেন।",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth()
             )
+            SecondaryButton("ইনভাইট কোড দিয়ে যোগ দিন") { vm.go(Screen.Register) }
             Text(
-                "সংস্করণ ${BuildConfig.VERSION_NAME}",
-                style = MaterialTheme.typography.bodySmall,
+                "অ্যাপ সংস্করণ ${BuildConfig.VERSION_NAME}",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
+                    .fillMaxWidth()
                     .padding(top = 24.dp)
                     .clickable {
                         taps++
@@ -148,18 +188,20 @@ fun RegisterScreen(vm: AppViewModel) {
     var invite by rememberSaveable { mutableStateOf("") }
 
     AuthColumn {
-        Text("নতুন অ্যাকাউন্ট", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+        LogoMark(48.dp)
+        Text("নতুন অ্যাকাউন্ট", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text("অ্যাডমিনের দেওয়া ইনভাইট কোড লাগবে।", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Field("পুরো নাম", name, { name = it })
-        Field("ফোন নম্বর", phone, { phone = it }, KeyboardType.Phone)
+        Field("ফোন নম্বর", phone, { phone = it }, KeyboardType.Phone, hint = "01XXXXXXXXX")
         Field("পাসওয়ার্ড (কমপক্ষে ৮ অক্ষর)", password, { password = it }, password = true)
         Field("পাসওয়ার্ড আবার দিন", confirm, { confirm = it }, password = true)
         Field("ইনভাইট কোড", invite, { invite = it })
         MessageText(vm)
-        Button(
-            onClick = { vm.register(name, phone, password, confirm, invite) },
+        PrimaryButton(
+            text = if (vm.busy) "অপেক্ষা করুন..." else "রেজিস্ট্রেশন",
             enabled = !vm.busy,
-            modifier = Modifier.fillMaxWidth()
-        ) { Text(if (vm.busy) "অপেক্ষা করুন..." else "রেজিস্ট্রেশন") }
-        TextButton(onClick = { vm.go(Screen.Login) }) { Text("লগইনে ফিরুন") }
+            onClick = { vm.register(name, phone, password, confirm, invite) }
+        )
+        SecondaryButton("লগইনে ফিরুন") { vm.go(Screen.Login) }
     }
 }

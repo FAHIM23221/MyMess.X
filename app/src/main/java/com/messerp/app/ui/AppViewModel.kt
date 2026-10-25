@@ -86,6 +86,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun comingSoon() {
+        note("এই সুবিধা পরের ধাপে আসছে।")
+    }
+
     fun restore() {
         if (!configured) {
             screen = Screen.Login
