@@ -17,6 +17,9 @@ jobs:
         with:
           gradle-version: 8.9
       - run: gradle assembleDebug --stacktrace
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       - uses: actions/upload-artifact@v4
         with:
           name: mess-erp-debug-apk
