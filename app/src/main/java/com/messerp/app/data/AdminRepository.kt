@@ -17,6 +17,7 @@ class AdminRepository(private val auth: AuthRepository) {
             msg.contains("admin_limit") -> "অ্যাডমিনের সর্বোচ্চ সীমা পূর্ণ।"
             msg.contains("reason_required") -> "কারণ লিখুন (কমপক্ষে ৩ অক্ষর)।"
             msg.contains("not_found") -> "সদস্য পাওয়া যায়নি।"
+            msg.contains("clear_balance_first") -> "আগে সদস্যের বাকি বা অগ্রিম শূন্য করুন, তারপর অ্যাডমিন করুন।"
             msg.contains("main_admin_protected") -> "মূল অ্যাডমিনকে বদলানো যায় না।"
             else -> "কাজটি সম্পন্ন হয়নি।"
         }
@@ -30,8 +31,9 @@ class AdminRepository(private val auth: AuthRepository) {
         return (0 until arr.length()).map { parseProfile(arr.getJSONObject(it)) }
     }
 
-    suspend fun createInvite(role: Role): String {
-        val res = call("POST", "/rest/v1/rpc/create_invite_code", JSONObject().put("p_role", role.name).toString())
+    suspend fun createInvite(role: Role, waiveGuardian: Boolean): String {
+        val body = JSONObject().put("p_role", role.name).put("p_waive_guardian", waiveGuardian).toString()
+        val res = call("POST", "/rest/v1/rpc/create_invite_code", body)
         if (res.code !in 200..299) fail(res)
         return res.body.trim().trim('"')
     }

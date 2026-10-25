@@ -41,4 +41,35 @@ object SupabaseHttp {
             HttpResult(resp.code, resp.body?.string().orEmpty())
         }
     }
+
+    suspend fun requestBytes(
+        method: String,
+        path: String,
+        body: ByteArray,
+        contentType: String,
+        accessToken: String,
+        headers: Map<String, String> = emptyMap()
+    ): HttpResult = withContext(Dispatchers.IO) {
+        val builder = Request.Builder()
+            .url(AppConfig.supabaseUrl.trimEnd('/') + path)
+            .header("apikey", AppConfig.supabaseAnonKey)
+            .header("Authorization", "Bearer $accessToken")
+        for ((k, v) in headers) builder.header(k, v)
+        builder.method(method, body.toRequestBody(contentType.toMediaType()))
+        client.newCall(builder.build()).execute().use { resp ->
+            HttpResult(resp.code, resp.body?.string().orEmpty())
+        }
+    }
+
+    suspend fun getBytes(path: String, accessToken: String): ByteArray? = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(AppConfig.supabaseUrl.trimEnd('/') + path)
+            .header("apikey", AppConfig.supabaseAnonKey)
+            .header("Authorization", "Bearer $accessToken")
+            .get()
+            .build()
+        client.newCall(request).execute().use { resp ->
+            if (resp.code in 200..299) resp.body?.bytes() else null
+        }
+    }
 }

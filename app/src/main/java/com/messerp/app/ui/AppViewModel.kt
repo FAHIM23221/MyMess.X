@@ -2,14 +2,21 @@ package com.messerp.app.ui
 
 import android.app.Application
 import android.content.Intent
+import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.messerp.app.config.AppConfig
 import com.messerp.app.data.AdminRepository
+import com.messerp.app.data.AvatarRepository
+import com.messerp.app.data.ImageUtil
 import com.messerp.app.data.AuthException
 import com.messerp.app.data.AuthRepository
 import com.messerp.app.data.DuesOverview
@@ -52,6 +59,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val admin = AdminRepository(auth)
     private val meals = MealRepository(auth)
     private val ledgerRepo = LedgerRepository(auth)
+    private val avatars = AvatarRepository(auth)
 
     var screen by mutableStateOf<Screen>(Screen.Splash)
         private set
@@ -97,6 +105,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var lastReceiptNo by mutableStateOf<String?>(null)
         private set
+
+    val avatarCache = mutableStateMapOf<String, ImageBitmap>()
+    private val avatarLoading = mutableSetOf<String>()
 
     val configured: Boolean get() = AppConfig.isSupabaseConfigured
 
@@ -165,7 +176,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: Exception) {
             error("মিলের তথ্য আনা যায়নি।")
         }
-        try {
+        if (p.role == Role.MEMBER) try {
             myLedger = ledgerRepo.ledger(null, null)
         } catch (e: Exception) {
             // The balance card stays empty; the Bills screen shows the real error if it persists.
@@ -201,18 +212,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun register(name: String, phoneRaw: String, password: String, confirm: String, inviteRaw: String) {
+    fun register(
+        name: String, phoneRaw: String,
+        fatherName: String, fatherPhoneRaw: String, motherName: String, motherPhoneRaw: String,
+        room: String, seat: String,
+        password: String, confirm: String, inviteRaw: String
+    ) {
         if (!configured) return error("ব্যাকএন্ড কনফিগার করা নেই।")
         val phone = Validators.normalizePhone(phoneRaw)
+        val fp = if (fatherPhoneRaw.isBlank()) "" else Validators.normalizePhone(fatherPhoneRaw)
+        val mp = if (motherPhoneRaw.isBlank()) "" else Validators.normalizePhone(motherPhoneRaw)
         val invite = Validators.normalizeInvite(inviteRaw)
+        val fatherGiven = fatherName.isNotBlank() || fp.isNotEmpty()
+        val motherGiven = motherName.isNotBlank() || mp.isNotEmpty()
         when {
             !Validators.isValidName(name) -> return error("নাম ২ থেকে ৬০ অক্ষরের হতে হবে।")
             !Validators.isValidPhone(phone) -> return error("সঠিক ফোন নম্বর দিন (01XXXXXXXXX)।")
+            fatherGiven && (!Validators.isValidName(fatherName) || !Validators.isValidPhone(fp)) ->
+                return error("বাবার নাম ও সঠিক ফোন নম্বর (01XXXXXXXXX) দিন।")
+            motherGiven && (!Validators.isValidName(motherName) || !Validators.isValidPhone(mp)) ->
+                return error("মায়ের নাম ও সঠিক ফোন নম্বর (01XXXXXXXXX) দিন।")
+            room.isBlank() || seat.isBlank() -> return error("রুম নম্বর ও সিট নম্বর দিন।")
+            room.trim().length > 20 || seat.trim().length > 20 -> return error("রুম বা সিট নম্বর অনেক বড়।")
             !Validators.isValidPassword(password) -> return error("পাসওয়ার্ড কমপক্ষে ৮ অক্ষরের হতে হবে।")
             password != confirm -> return error("দুই পাসওয়ার্ড মেলেনি।")
             invite.isEmpty() -> return error("ইনভাইট কোড দিন।")
         }
-        launchSafe { enter(auth.signUp(name, phone, password, invite)) }
+        val extra = mapOf(
+            "room_no" to room, "seat_no" to seat,
+            "father_name" to fatherName, "father_phone" to fp,
+            "mother_name" to motherName, "mother_phone" to mp
+        )
+        launchSafe { enter(auth.signUp(name, phone, password, invite, extra, fatherGiven || motherGiven)) }
     }
 
     fun logout() {
@@ -250,9 +281,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun createInvite(role: Role) {
+    fun createInvite(role: Role, waiveGuardian: Boolean = false) {
         launchSafe {
-            lastInvite = admin.createInvite(role)
+            lastInvite = admin.createInvite(role, waiveGuardian)
             note("কোড তৈরি হয়েছে। এটি ৭ দিন বৈধ এবং একবারই ব্যবহার করা যাবে।")
         }
     }
@@ -282,7 +313,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun refreshMeal() {
-        mealStatus = meals.myStatus()
+        // Admins have no personal meal account; they only see the mess-wide summary.
+        if (profile?.role == Role.MEMBER) mealStatus = meals.myStatus()
         summary = meals.summary()
     }
 
@@ -403,12 +435,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val splitIdem = Idem()
 
     private suspend fun refreshLedger() {
+        if (profile?.role != Role.MEMBER && ledgerMemberId == null) {
+            ledger = null
+            return
+        }
         val l = ledgerRepo.ledger(ledgerMemberId, ledgerMonth.ifEmpty { null })
         ledger = l
         if (ledgerMonth.isEmpty()) ledgerMonth = l.monthStart
     }
 
     private suspend fun refreshMyLedger() {
+        if (profile?.role != Role.MEMBER) return
         myLedger = ledgerRepo.ledger(null, null)
     }
 
@@ -532,7 +569,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val r = ledgerRepo.receipt(paymentId)
             val name = "Receipt-${r.receiptNo}.pdf"
             val bytes = ReceiptPdf.build(r)
-            val saved = withContext(Dispatchers.IO) { ReceiptPdf.saveToDownloads(getApplication(), name, bytes) }
+            val saved = withContext(Dispatchers.IO) { ReceiptPdf.saveToDownloads(getApplication<Application>(), name, bytes) }
             if (saved) note("রসিদ Downloads ফোল্ডারে সংরক্ষিত হয়েছে: $name")
             else error("এই Android সংস্করণে সরাসরি সংরক্ষণ সম্ভব নয়। শেয়ার বাটন ব্যবহার করুন।")
         }
@@ -543,7 +580,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val r = ledgerRepo.receipt(paymentId)
             val name = "Receipt-${r.receiptNo}.pdf"
             val bytes = ReceiptPdf.build(r)
-            val uri = withContext(Dispatchers.IO) { ReceiptPdf.cacheUri(getApplication(), name, bytes) }
+            val uri = withContext(Dispatchers.IO) { ReceiptPdf.cacheUri(getApplication<Application>(), name, bytes) }
             val send = Intent(Intent.ACTION_SEND).apply {
                 type = "application/pdf"
                 putExtra(Intent.EXTRA_STREAM, uri)
@@ -551,6 +588,54 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             val chooser = Intent.createChooser(send, "রসিদ শেয়ার করুন").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
             getApplication<Application>().startActivity(chooser)
+        }
+    }
+
+    fun saveProfile(name: String, fatherName: String, fatherPhoneRaw: String, motherName: String, motherPhoneRaw: String) {
+        val fp = if (fatherPhoneRaw.isBlank()) "" else Validators.normalizePhone(fatherPhoneRaw)
+        val mp = if (motherPhoneRaw.isBlank()) "" else Validators.normalizePhone(motherPhoneRaw)
+        val fatherGiven = fatherName.isNotBlank() || fp.isNotEmpty()
+        val motherGiven = motherName.isNotBlank() || mp.isNotEmpty()
+        if (!Validators.isValidName(name)) return error("নাম ২ থেকে ৬০ অক্ষরের হতে হবে।")
+        if (fatherGiven && (!Validators.isValidName(fatherName) || !Validators.isValidPhone(fp))) {
+            return error("বাবার নাম ও সঠিক ফোন নম্বর (01XXXXXXXXX) দিন।")
+        }
+        if (motherGiven && (!Validators.isValidName(motherName) || !Validators.isValidPhone(mp))) {
+            return error("মায়ের নাম ও সঠিক ফোন নম্বর (01XXXXXXXXX) দিন।")
+        }
+        launchSafe {
+            profile = auth.updateProfile(name, fatherName, fp, motherName, mp)
+            note("তথ্য সংরক্ষিত হয়েছে।")
+        }
+    }
+
+    fun uploadAvatar(uri: Uri) {
+        val p = profile ?: return
+        launchSafe {
+            val bytes = withContext(Dispatchers.IO) { ImageUtil.prepareJpeg(getApplication<Application>(), uri) }
+                ?: throw AuthException("ছবি পড়া যায়নি। অন্য ছবি বেছে নিন।")
+            val path = avatars.upload(p.id, bytes)
+            profile = p.copy(avatarUrl = path)
+            note("প্রোফাইল ছবি আপডেট হয়েছে।")
+        }
+    }
+
+    fun loadAvatar(path: String) {
+        if (avatarCache.containsKey(path) || !avatarLoading.add(path)) return
+        viewModelScope.launch {
+            try {
+                val bytes = avatars.fetch(path)
+                if (bytes != null) {
+                    val bmp = withContext(Dispatchers.Default) {
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                    }
+                    if (bmp != null) avatarCache[path] = bmp
+                }
+            } catch (e: Exception) {
+                // The initial letter is shown instead of the photo.
+            } finally {
+                avatarLoading.remove(path)
+            }
         }
     }
 }

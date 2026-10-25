@@ -31,12 +31,19 @@ class AuthRepository(private val store: SessionStore) {
         return loadActiveProfile()
     }
 
-    suspend fun signUp(name: String, phone: String, password: String, inviteCode: String): Profile {
+    suspend fun signUp(
+        name: String, phone: String, password: String, inviteCode: String,
+        extra: Map<String, String>, hasGuardian: Boolean
+    ): Profile {
         val data = JSONObject().put("phone", phone).put("full_name", name.trim()).put("invite_code", inviteCode)
+        for ((k, v) in extra) if (v.isNotBlank()) data.put(k, v.trim())
         val body = JSONObject().put("email", emailFor(phone)).put("password", password).put("data", data).toString()
         val res = SupabaseHttp.request("POST", "/auth/v1/signup", body)
         if (res.code !in 200..299) {
-            throw AuthException("রেজিস্ট্রেশন সম্ভব হয়নি। তথ্য ও ইনভাইট কোড যাচাই করুন।")
+            throw AuthException(
+                if (hasGuardian) "রেজিস্ট্রেশন সম্ভব হয়নি। তথ্য ও ইনভাইট কোড যাচাই করুন।"
+                else "রেজিস্ট্রেশন সম্ভব হয়নি। বাবা বা মায়ের তথ্য না দিলে মূল অ্যাডমিনের দেওয়া বিশেষ কোড লাগবে।"
+            )
         }
         val json = JSONObject(res.body)
         if (!json.has("access_token")) return signIn(phone, password)
@@ -107,5 +114,26 @@ class AuthRepository(private val store: SessionStore) {
             }
         }
         store.clear()
+    }
+
+    suspend fun updateProfile(name: String, fatherName: String, fatherPhone: String, motherName: String, motherPhone: String): Profile {
+        val token = accessToken()
+        val uid = store.load()?.userId ?: throw AuthException("লগইন করা নেই।")
+        fun v(x: String): Any = if (x.isBlank()) JSONObject.NULL else x.trim()
+        val body = JSONObject()
+            .put("full_name", name.trim())
+            .put("father_name", v(fatherName)).put("father_phone", v(fatherPhone))
+            .put("mother_name", v(motherName)).put("mother_phone", v(motherPhone))
+            .toString()
+        val res = SupabaseHttp.request(
+            "PATCH", "/rest/v1/profiles?id=eq.$uid", body, token,
+            mapOf("Prefer" to "return=representation")
+        )
+        if (res.code !in 200..299) {
+            throw AuthException("তথ্য সংরক্ষণ হয়নি। বাবা বা মায়ের অন্তত একজনের নাম ও নম্বর থাকতে হবে।")
+        }
+        val arr = JSONArray(res.body)
+        if (arr.length() == 0) throw AuthException("তথ্য সংরক্ষণ হয়নি।")
+        return parseProfile(arr.getJSONObject(0))
     }
 }

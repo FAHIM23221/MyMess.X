@@ -15,7 +15,12 @@ data class Profile(
     val status: String,
     val role: Role,
     val isCurrentManager: Boolean,
-    val avatarUrl: String?
+    val avatarUrl: String?,
+    val fatherName: String? = null,
+    val fatherPhone: String? = null,
+    val motherName: String? = null,
+    val motherPhone: String? = null,
+    val guardianWaived: Boolean = false
 ) {
     val isActive: Boolean get() = status == "ACTIVE"
 }
@@ -34,5 +39,10 @@ fun parseProfile(o: JSONObject): Profile = Profile(
     // Unknown values fall back to the least privileged role.
     role = runCatching { Role.valueOf(o.getString("role")) }.getOrDefault(Role.MEMBER),
     isCurrentManager = o.optBoolean("is_current_manager", false),
-    avatarUrl = o.strOrNull("avatar_url")
+    avatarUrl = o.strOrNull("avatar_url"),
+    fatherName = o.strOrNull("father_name"),
+    fatherPhone = o.strOrNull("father_phone"),
+    motherName = o.strOrNull("mother_name"),
+    motherPhone = o.strOrNull("mother_phone"),
+    guardianWaived = o.optBoolean("guardian_waived", false)
 )

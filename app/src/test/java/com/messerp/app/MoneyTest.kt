@@ -2,6 +2,7 @@ package com.messerp.app
 
 import com.messerp.app.data.Dates
 import com.messerp.app.data.Money
+import com.messerp.app.data.ReceiptPdf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -45,5 +46,12 @@ class MoneyTest {
         assertEquals("2026-10-01", Dates.monthStart("2026-10-25"))
         assertEquals("2026-12-01", Dates.addMonths("2026-11-01", 1))
         assertEquals("2025-12-01", Dates.addMonths("2026-01-01", -1))
+    }
+
+    @Test fun receiptTimeIsLocalAndBengali() {
+        assertEquals("২০২৬-১০-২৫, রাত ৯:৩৬", ReceiptPdf.formatLocal("2026-10-25 21:36"))
+        assertEquals("২০২৬-১০-২৫, সকাল ৮:০৫", ReceiptPdf.formatLocal("2026-10-25 08:05"))
+        assertEquals("২০২৬-১০-২৫, দুপুর ১২:১০", ReceiptPdf.formatLocal("2026-10-25 12:10"))
+        assertEquals("২০২৬-১০-২৫, রাত ১২:০৫", ReceiptPdf.formatLocal("2026-10-25 00:05"))
     }
 }

@@ -1,6 +1,11 @@
 package com.messerp.app.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -190,5 +195,34 @@ fun ChoiceChip(text: String, selected: Boolean, onClick: () -> Unit) {
             fontWeight = FontWeight.SemiBold,
             color = if (selected) c.onPrimary else c.onSurfaceVariant
         )
+    }
+}
+
+@Composable
+fun AvatarCircle(vm: AppViewModel, path: String?, name: String, size: Dp) {
+    val bmp = if (path != null) vm.avatarCache[path] else null
+    LaunchedEffect(path) { if (path != null) vm.loadAvatar(path) }
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary),
+        contentAlignment = Alignment.Center
+    ) {
+        if (bmp != null) {
+            Image(
+                bitmap = bmp,
+                contentDescription = name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Text(
+                name.take(1).uppercase(),
+                color = MaterialTheme.colorScheme.onPrimary,
+                fontSize = (size.value * 0.4f).sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }

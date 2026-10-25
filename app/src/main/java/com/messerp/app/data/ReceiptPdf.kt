@@ -24,6 +24,23 @@ object ReceiptPdf {
         else -> "অন্যান্য"
     }
 
+    /** "2026-10-25 21:36" (Dhaka time) -> "২০২৬-১০-২৫, রাত ৯:৩৬" */
+    fun formatLocal(local: String): String {
+        val parts = local.split(" ")
+        if (parts.size != 2) return Money.bn(local)
+        val hm = parts[1].split(":")
+        val h = hm[0].toIntOrNull() ?: return Money.bn(local)
+        val period = when (h) {
+            in 4..11 -> "সকাল"
+            in 12..15 -> "দুপুর"
+            in 16..17 -> "বিকাল"
+            in 18..19 -> "সন্ধ্যা"
+            else -> "রাত"
+        }
+        val h12 = if (h % 12 == 0) 12 else h % 12
+        return Money.bn(parts[0]) + ", " + period + " " + Money.bn(h12.toString() + ":" + hm.getOrElse(1) { "00" })
+    }
+
     fun build(r: Receipt): ByteArray {
         val doc = PdfDocument()
         val page = doc.startPage(PdfDocument.PageInfo.Builder(420, 595, 1).create())
@@ -51,7 +68,8 @@ object ReceiptPdf {
         }
 
         row("রসিদ নম্বর", r.receiptNo)
-        row("তারিখ", Money.bn(r.paidDate))
+        row("পেমেন্টের তারিখ", Money.bn(r.paidDate))
+        row("রসিদ তৈরির সময়", formatLocal(r.createdLocal))
         row("সদস্য", "${r.memberName} (${r.memberCode})")
         row("ফোন", Money.bn(r.memberPhone))
         row("পেমেন্টের মাধ্যম", methodLabel(r.method))
@@ -68,16 +86,17 @@ object ReceiptPdf {
         if (r.status == "REVERSED") {
             val stamp = Paint().apply { isAntiAlias = true; color = Color.parseColor("#B42318"); textSize = 54f; isFakeBoldText = true; textAlign = Paint.Align.CENTER }
             c.save()
-            c.rotate(-18f, 210f, 380f)
-            c.drawText("বাতিল", 210f, 390f, stamp)
+            c.rotate(-18f, 210f, 495f)
+            c.drawText("বাতিল", 210f, 495f, stamp)
             c.restore()
             val why = Paint().apply { isAntiAlias = true; color = Color.parseColor("#B42318"); textSize = 12f; textAlign = Paint.Align.CENTER }
-            c.drawText("কারণ: " + (r.reversalReason ?: "—").take(40), 210f, 430f, why)
+            c.drawText("কারণ: " + (r.reversalReason ?: "—").take(40), 210f, 522f, why)
+            if (r.reversedLocal != null) c.drawText("বাতিলের সময়: " + formatLocal(r.reversedLocal), 210f, 538f, why)
         }
 
         val foot = Paint().apply { isAntiAlias = true; color = Color.parseColor("#4B5B52"); textSize = 11f; textAlign = Paint.Align.CENTER }
-        c.drawText("এটি সিস্টেম থেকে তৈরি ডিজিটাল রসিদ।", 210f, 540f, foot)
-        c.drawText("তৈরির সময়: " + Money.bn(r.createdAt.take(10)), 210f, 558f, foot)
+        c.drawText("এটি সিস্টেম থেকে তৈরি ডিজিটাল রসিদ।", 210f, 566f, foot)
+        c.drawText("তৈরির সময়: " + formatLocal(r.createdLocal), 210f, 582f, foot)
 
         doc.finishPage(page)
         val out = ByteArrayOutputStream()
