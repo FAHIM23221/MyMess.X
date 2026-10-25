@@ -138,7 +138,7 @@ fun SectionTitle(text: String) {
 }
 
 @Composable
-fun BottomBar(active: Int, onHome: () -> Unit, onProfile: () -> Unit, onSoon: () -> Unit) {
+fun BottomBar(active: Int, onHome: () -> Unit, onMeal: () -> Unit, onProfile: () -> Unit, onSoon: () -> Unit) {
     val labels = listOf("হোম", "মিল", "বার্তা", "প্রোফাইল")
     val c = MaterialTheme.colorScheme
     Surface(color = c.surface, shadowElevation = 6.dp) {
@@ -146,6 +146,7 @@ fun BottomBar(active: Int, onHome: () -> Unit, onProfile: () -> Unit, onSoon: ()
             labels.forEachIndexed { i, label ->
                 val action = when (i) {
                     0 -> onHome
+                    1 -> onMeal
                     3 -> onProfile
                     else -> onSoon
                 }
@@ -170,5 +171,24 @@ fun BottomBar(active: Int, onHome: () -> Unit, onProfile: () -> Unit, onSoon: ()
                 }
             }
         }
+    }
+}
+
+@Composable
+fun ChoiceChip(text: String, selected: Boolean, onClick: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(20.dp)
+    Surface(
+        shape = shape,
+        color = if (selected) c.primary else c.surfaceVariant,
+        modifier = Modifier.clip(shape).clickable(onClick = onClick)
+    ) {
+        Text(
+            text,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (selected) c.onPrimary else c.onSurfaceVariant
+        )
     }
 }

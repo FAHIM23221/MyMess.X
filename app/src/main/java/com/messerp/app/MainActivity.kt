@@ -10,8 +10,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.messerp.app.ui.AppViewModel
+import com.messerp.app.ui.ExpensesScreen
 import com.messerp.app.ui.HomeScreen
 import com.messerp.app.ui.LoginScreen
+import com.messerp.app.ui.MealScreen
 import com.messerp.app.ui.MessTheme
 import com.messerp.app.ui.ProfileScreen
 import com.messerp.app.ui.RegisterScreen
@@ -37,6 +39,14 @@ class MainActivity : ComponentActivity() {
                             RegisterScreen(vm)
                         }
                         Screen.Home -> HomeScreen(vm)
+                        Screen.Meal -> {
+                            BackHandler { vm.go(Screen.Home) }
+                            MealScreen(vm)
+                        }
+                        Screen.Expenses -> {
+                            BackHandler { vm.go(Screen.Home) }
+                            ExpensesScreen(vm)
+                        }
                         Screen.ProfileScreen -> {
                             BackHandler { vm.go(Screen.Home) }
                             ProfileScreen(vm)

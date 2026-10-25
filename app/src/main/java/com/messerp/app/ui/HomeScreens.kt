@@ -36,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.messerp.app.data.Money
 import com.messerp.app.data.Profile
 import com.messerp.app.data.Role
 
@@ -68,7 +69,7 @@ fun AppScaffold(vm: AppViewModel, active: Int, title: String, subtitle: String, 
             verticalArrangement = Arrangement.spacedBy(12.dp),
             content = content
         )
-        BottomBar(active, { vm.go(Screen.Home) }, { vm.go(Screen.ProfileScreen) }, { vm.comingSoon() })
+        BottomBar(active, { vm.go(Screen.Home) }, { vm.go(Screen.Meal) }, { vm.go(Screen.ProfileScreen) }, { vm.comingSoon() })
     }
 }
 
@@ -88,7 +89,7 @@ fun HomeScreen(vm: AppViewModel) {
     AppScaffold(vm, 0, title, subtitle) {
         MessageText(vm)
         when (p.role) {
-            Role.MEMBER -> MemberContent(vm)
+            Role.MEMBER -> MemberContent(vm, p)
             Role.ADMIN -> AdminContent(vm, p, false)
             Role.MAIN_ADMIN -> AdminContent(vm, p, true)
         }
@@ -109,21 +110,27 @@ fun MyInfoCard(p: Profile) {
 }
 
 @Composable
-fun MemberContent(vm: AppViewModel) {
+fun MemberContent(vm: AppViewModel, p: Profile) {
     val soon = { vm.comingSoon() }
+    val mine = vm.summary?.members?.firstOrNull { it.id == p.id }
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        StatCard("আমার ব্যালেন্স", "—", Modifier.weight(1f), "পরের ধাপে চালু হবে")
-        StatCard("মোট বাকি", "—", Modifier.weight(1f), "পরের ধাপে চালু হবে")
+        StatCard("এ মাসে আমার মিল", mine?.let { Money.bn(it.meals) } ?: "—", Modifier.weight(1f), "গেস্টসহ")
+        StatCard("প্রতি মিলের রেট", Money.formatRate(vm.summary?.rateMinor), Modifier.weight(1f), "বাজার খরচ ÷ মোট মিল")
     }
+    val st = vm.mealStatus
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        StatusChip("মিল: শীঘ্রই")
-        StatusChip("চাল: শীঘ্রই")
-        StatusChip("জরিমানা: শীঘ্রই")
+        if (st != null) {
+            StatusChip("সকাল: ${if (st.breakfast) "চালু" else "বন্ধ"}", st.breakfast)
+            StatusChip("দুপুর: ${if (st.lunch) "চালু" else "বন্ধ"}", st.lunch)
+            StatusChip("রাত: ${if (st.dinner) "চালু" else "বন্ধ"}", st.dinner)
+        } else {
+            StatusChip("আজকের মিল: লোড হচ্ছে")
+        }
     }
     TileGrid(
         listOf(
+            Tile("মিল অন/অফ", true) { vm.go(Screen.Meal) },
             Tile("আমার ব্যালেন্স", false, soon),
-            Tile("মিল অন/অফ", false, soon),
             Tile("চাল", false, soon),
             Tile("স্বচ্ছতা", false, soon),
             Tile("পেমেন্ট ও রসিদ", false, soon),
@@ -163,7 +170,7 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
         StatCard("মোট সদস্য", "${vm.members.size}", Modifier.weight(1f))
     }
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        StatCard("মিল অনুরোধ", "—", Modifier.weight(1f), "শীঘ্রই")
+        StatCard("এ মাসের বাজার খরচ", vm.summary?.let { Money.format(it.totalExpenseMinor) } ?: "—", Modifier.weight(1f))
         StatCard("মোট বকেয়া", "—", Modifier.weight(1f), "শীঘ্রই")
     }
 
@@ -171,8 +178,8 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
     val tiles = mutableListOf(Tile("নতুন সদস্যের কোড", !vm.busy) { vm.createInvite(Role.MEMBER) })
     if (isMain) tiles.add(Tile("নতুন অ্যাডমিনের কোড", !vm.busy) { vm.createInvite(Role.ADMIN) })
     tiles.add(Tile("পেমেন্ট লিখুন", false, soon))
-    tiles.add(Tile("খরচ যোগ করুন", false, soon))
-    tiles.add(Tile("মিল ও চাল", false, soon))
+    tiles.add(Tile("বাজার খরচ ও গেস্ট মিল", true) { vm.go(Screen.Expenses) })
+    tiles.add(Tile("মিল ও রেট", true) { vm.go(Screen.Meal) })
     tiles.add(Tile("নোটিশ দিন", false, soon))
     TileGrid(tiles)
 
