@@ -34,4 +34,12 @@ object Dates {
         val last = c.getActualMaximum(Calendar.DAY_OF_MONTH)
         return format(c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, last)
     }
+
+    fun monthStart(date: String): String = date.substring(0, 8) + "01"
+
+    fun addMonths(monthStart: String, n: Int): String {
+        val c = parse(monthStart)
+        c.add(Calendar.MONTH, n)
+        return format(c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, 1)
+    }
 }

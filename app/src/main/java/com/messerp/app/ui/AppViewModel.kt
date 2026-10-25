@@ -1,6 +1,7 @@
 package com.messerp.app.ui
 
 import android.app.Application
+import android.content.Intent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -11,18 +12,25 @@ import com.messerp.app.config.AppConfig
 import com.messerp.app.data.AdminRepository
 import com.messerp.app.data.AuthException
 import com.messerp.app.data.AuthRepository
+import com.messerp.app.data.DuesOverview
 import com.messerp.app.data.Expense
 import com.messerp.app.data.GuestMeal
+import com.messerp.app.data.LedgerRepository
 import com.messerp.app.data.MealRepository
 import com.messerp.app.data.MealStatus
 import com.messerp.app.data.MealSummary
+import com.messerp.app.data.MemberLedger
+import com.messerp.app.data.PaymentRow
+import com.messerp.app.data.ReceiptPdf
 import com.messerp.app.data.Money
 import com.messerp.app.data.Dates
 import com.messerp.app.data.Profile
 import com.messerp.app.data.Role
 import com.messerp.app.data.SessionStore
 import com.messerp.app.data.Validators
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.util.UUID
 
@@ -35,12 +43,15 @@ sealed interface Screen {
     data object ProfileScreen : Screen
     data object Meal : Screen
     data object Expenses : Screen
+    data object Bills : Screen
+    data object Finance : Screen
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val auth = AuthRepository(SessionStore(app))
     private val admin = AdminRepository(auth)
     private val meals = MealRepository(auth)
+    private val ledgerRepo = LedgerRepository(auth)
 
     var screen by mutableStateOf<Screen>(Screen.Splash)
         private set
@@ -68,6 +79,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var guestMeals by mutableStateOf<List<GuestMeal>>(emptyList())
         private set
     var formVersion by mutableIntStateOf(0)
+        private set
+
+    var ledger by mutableStateOf<MemberLedger?>(null)
+        private set
+    var myLedger by mutableStateOf<MemberLedger?>(null)
+        private set
+    var ledgerMonth by mutableStateOf("")
+        private set
+    var ledgerMemberId by mutableStateOf<String?>(null)
+        private set
+    var dues by mutableStateOf<DuesOverview?>(null)
+        private set
+    var payments by mutableStateOf<List<PaymentRow>>(emptyList())
+        private set
+    var lastPaymentId by mutableStateOf<String?>(null)
+        private set
+    var lastReceiptNo by mutableStateOf<String?>(null)
         private set
 
     val configured: Boolean get() = AppConfig.isSupabaseConfigured
@@ -137,7 +165,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: Exception) {
             error("মিলের তথ্য আনা যায়নি।")
         }
-        if (p.role != Role.MEMBER) loadAdminData(p)
+        try {
+            myLedger = ledgerRepo.ledger(null, null)
+        } catch (e: Exception) {
+            // The balance card stays empty; the Bills screen shows the real error if it persists.
+        }
+        if (p.role != Role.MEMBER) {
+            try {
+                dues = ledgerRepo.dues()
+            } catch (e: Exception) {
+                // Shown as a dash on the dashboard.
+            }
+            loadAdminData(p)
+        }
     }
 
     private suspend fun loadAdminData(p: Profile) {
@@ -186,6 +226,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             summary = null
             expenses = emptyList()
             guestMeals = emptyList()
+            ledger = null
+            myLedger = null
+            dues = null
+            payments = emptyList()
+            lastPaymentId = null
+            lastReceiptNo = null
             go(Screen.Login)
         }
     }
@@ -334,6 +380,177 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             meals.voidGuestMeal(id, reason)
             refreshExpenses()
             note("গেস্ট মিল বাতিল হয়েছে।")
+        }
+    }
+
+    private class Idem {
+        private var key: String? = null
+        private var id: String = UUID.randomUUID().toString()
+        fun idFor(k: String): String {
+            if (k != key) {
+                key = k
+                id = UUID.randomUUID().toString()
+            }
+            return id
+        }
+        fun clear() {
+            key = null
+        }
+    }
+
+    private val payIdem = Idem()
+    private val chargeIdem = Idem()
+    private val splitIdem = Idem()
+
+    private suspend fun refreshLedger() {
+        val l = ledgerRepo.ledger(ledgerMemberId, ledgerMonth.ifEmpty { null })
+        ledger = l
+        if (ledgerMonth.isEmpty()) ledgerMonth = l.monthStart
+    }
+
+    private suspend fun refreshMyLedger() {
+        myLedger = ledgerRepo.ledger(null, null)
+    }
+
+    private suspend fun refreshFinance() {
+        dues = ledgerRepo.dues()
+        payments = ledgerRepo.listPayments()
+        refreshLedger()
+        refreshMyLedger()
+        if (members.isEmpty()) members = admin.listMembers()
+    }
+
+    fun openBills() {
+        ledgerMemberId = null
+        ledgerMonth = ""
+        ledger = null
+        go(Screen.Bills)
+    }
+
+    fun openFinance() {
+        ledgerMemberId = null
+        ledgerMonth = ""
+        ledger = null
+        go(Screen.Finance)
+    }
+
+    fun loadLedger() {
+        launchSafe {
+            refreshLedger()
+            refreshMyLedger()
+        }
+    }
+
+    fun loadFinance() {
+        launchSafe { refreshFinance() }
+    }
+
+    fun shiftMonth(delta: Int) {
+        if (ledgerMonth.isEmpty()) return
+        ledgerMonth = Dates.addMonths(ledgerMonth, delta)
+        loadLedger()
+    }
+
+    fun selectLedgerMember(id: String?) {
+        ledgerMemberId = id
+        ledgerMonth = ""
+        loadLedger()
+    }
+
+    fun recordPayment(memberId: String, amountText: String, method: String, date: String, txnRef: String, memo: String) {
+        if (memberId.isEmpty()) return error("কার পেমেন্ট তা বাছুন।")
+        val minor = Money.parseTakaToMinor(amountText)
+            ?: return error("সঠিক পরিমাণ দিন (১ থেকে ১০,০০,০০০ টাকা, সর্বোচ্চ ২ দশমিক ঘর)।")
+        val reqId = payIdem.idFor("$memberId|$minor|$method|$date|${txnRef.trim()}|${memo.trim()}")
+        launchSafe {
+            val result = ledgerRepo.recordPayment(memberId, minor, method, date, memo, txnRef, reqId)
+            payIdem.clear()
+            lastPaymentId = result.first
+            lastReceiptNo = result.second
+            refreshFinance()
+            formVersion++
+            note("পেমেন্ট সংরক্ষিত হয়েছে। রসিদ নম্বর: ${result.second}")
+        }
+    }
+
+    fun reversePayment(id: String, reason: String) {
+        launchSafe {
+            ledgerRepo.reversePayment(id, reason)
+            refreshFinance()
+            note("পেমেন্ট বাতিল হয়েছে। রসিদে বাতিল চিহ্ন থাকবে।")
+        }
+    }
+
+    fun addCharge(memberId: String, monthDate: String, category: String, amountText: String, desc: String) {
+        if (memberId.isEmpty()) return error("কোন সদস্যকে চার্জ দেবেন তা বাছুন।")
+        val minor = Money.parseTakaToMinor(amountText)
+            ?: return error("সঠিক পরিমাণ দিন (১ থেকে ১০,০০,০০০ টাকা, সর্বোচ্চ ২ দশমিক ঘর)।")
+        val month = Dates.monthStart(monthDate)
+        val reqId = chargeIdem.idFor("$memberId|$month|$category|$minor|${desc.trim()}")
+        launchSafe {
+            ledgerRepo.addCharge(memberId, month, category, minor, desc, reqId)
+            chargeIdem.clear()
+            refreshFinance()
+            formVersion++
+            note("চার্জ যোগ হয়েছে।")
+        }
+    }
+
+    fun splitCharge(monthDate: String, category: String, amountText: String, desc: String) {
+        val minor = Money.parseTakaToMinor(amountText)
+            ?: return error("সঠিক মোট পরিমাণ দিন (১ থেকে ১০,০০,০০০ টাকা, সর্বোচ্চ ২ দশমিক ঘর)।")
+        val month = Dates.monthStart(monthDate)
+        val reqId = splitIdem.idFor("$month|$category|$minor|${desc.trim()}")
+        launchSafe {
+            val n = ledgerRepo.splitCharge(month, category, minor, desc, reqId)
+            splitIdem.clear()
+            refreshFinance()
+            formVersion++
+            note("${Money.bn(n.toLong())} জন সদস্যের মধ্যে সমান ভাগ হয়েছে।")
+        }
+    }
+
+    fun postMeal(monthDate: String, force: Boolean, reason: String) {
+        val month = Dates.monthStart(monthDate)
+        launchSafe {
+            val n = ledgerRepo.postMealCharges(month, force, reason)
+            refreshFinance()
+            note(if (n > 0) "${Money.bn(n.toLong())} জন সদস্যের মিল চার্জ বসেছে।" else "নতুন কোনো চার্জ বসেনি (আগেই বসেছে বা মিল নেই)।")
+        }
+    }
+
+    fun reverseCharge(entryId: String, reason: String) {
+        launchSafe {
+            ledgerRepo.reverseCharge(entryId, reason)
+            refreshFinance()
+            note("চার্জ বাতিল হয়েছে।")
+        }
+    }
+
+    fun downloadReceipt(paymentId: String) {
+        launchSafe {
+            val r = ledgerRepo.receipt(paymentId)
+            val name = "Receipt-${r.receiptNo}.pdf"
+            val bytes = ReceiptPdf.build(r)
+            val saved = withContext(Dispatchers.IO) { ReceiptPdf.saveToDownloads(getApplication(), name, bytes) }
+            if (saved) note("রসিদ Downloads ফোল্ডারে সংরক্ষিত হয়েছে: $name")
+            else error("এই Android সংস্করণে সরাসরি সংরক্ষণ সম্ভব নয়। শেয়ার বাটন ব্যবহার করুন।")
+        }
+    }
+
+    fun shareReceipt(paymentId: String) {
+        launchSafe {
+            val r = ledgerRepo.receipt(paymentId)
+            val name = "Receipt-${r.receiptNo}.pdf"
+            val bytes = ReceiptPdf.build(r)
+            val uri = withContext(Dispatchers.IO) { ReceiptPdf.cacheUri(getApplication(), name, bytes) }
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val chooser = Intent.createChooser(send, "রসিদ শেয়ার করুন").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+            getApplication<Application>().startActivity(chooser)
         }
     }
 }

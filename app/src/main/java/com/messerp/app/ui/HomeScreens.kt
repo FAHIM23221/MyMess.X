@@ -114,7 +114,14 @@ fun MemberContent(vm: AppViewModel, p: Profile) {
     val soon = { vm.comingSoon() }
     val mine = vm.summary?.members?.firstOrNull { it.id == p.id }
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        StatCard("এ মাসে আমার মিল", mine?.let { Money.bn(it.meals) } ?: "—", Modifier.weight(1f), "গেস্টসহ")
+        val lg = vm.myLedger
+        val bal = when {
+            lg == null -> Triple("আমার ব্যালেন্স", "—", "লোড হচ্ছে")
+            lg.dueMinor > 0 -> Triple("আমার বাকি", Money.format(lg.dueMinor), "পরিশোধ করুন")
+            lg.advanceMinor > 0 -> Triple("অগ্রিম জমা", Money.format(lg.advanceMinor), "পরের চার্জে সমন্বয় হবে")
+            else -> Triple("আমার ব্যালেন্স", "৳ " + Money.bn("0.00"), "কোনো বাকি নেই")
+        }
+        StatCard(bal.first, bal.second, Modifier.weight(1f), bal.third)
         StatCard("প্রতি মিলের রেট", Money.formatRate(vm.summary?.rateMinor), Modifier.weight(1f), "বাজার খরচ ÷ মোট মিল")
     }
     val st = vm.mealStatus
@@ -130,10 +137,10 @@ fun MemberContent(vm: AppViewModel, p: Profile) {
     TileGrid(
         listOf(
             Tile("মিল অন/অফ", true) { vm.go(Screen.Meal) },
-            Tile("আমার ব্যালেন্স", false, soon),
+            Tile("আমার ব্যালেন্স", true) { vm.openBills() },
             Tile("চাল", false, soon),
             Tile("স্বচ্ছতা", false, soon),
-            Tile("পেমেন্ট ও রসিদ", false, soon),
+            Tile("পেমেন্ট ও রসিদ", true) { vm.openBills() },
             Tile("ডিউটি", false, soon)
         )
     )
@@ -171,13 +178,14 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
     }
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         StatCard("এ মাসের বাজার খরচ", vm.summary?.let { Money.format(it.totalExpenseMinor) } ?: "—", Modifier.weight(1f))
-        StatCard("মোট বকেয়া", "—", Modifier.weight(1f), "শীঘ্রই")
+        StatCard("মোট বকেয়া", vm.dues?.let { Money.format(it.totalDueMinor) } ?: "—", Modifier.weight(1f))
     }
 
     SectionTitle("দ্রুত কাজ")
     val tiles = mutableListOf(Tile("নতুন সদস্যের কোড", !vm.busy) { vm.createInvite(Role.MEMBER) })
     if (isMain) tiles.add(Tile("নতুন অ্যাডমিনের কোড", !vm.busy) { vm.createInvite(Role.ADMIN) })
-    tiles.add(Tile("পেমেন্ট লিখুন", false, soon))
+    tiles.add(Tile("পেমেন্ট ও চার্জ", true) { vm.go(Screen.Finance) })
+    tiles.add(Tile("আমার ব্যালেন্স", true) { vm.openBills() })
     tiles.add(Tile("বাজার খরচ ও গেস্ট মিল", true) { vm.go(Screen.Expenses) })
     tiles.add(Tile("মিল ও রেট", true) { vm.go(Screen.Meal) })
     tiles.add(Tile("নোটিশ দিন", false, soon))

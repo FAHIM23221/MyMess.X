@@ -40,4 +40,10 @@ class MoneyTest {
         assertEquals("2026-10-31", Dates.endOfMonth("2026-10-05"))
         assertEquals("2024-02-29", Dates.endOfMonth("2024-02-10"))
     }
+
+    @Test fun monthMathWorks() {
+        assertEquals("2026-10-01", Dates.monthStart("2026-10-25"))
+        assertEquals("2026-12-01", Dates.addMonths("2026-11-01", 1))
+        assertEquals("2025-12-01", Dates.addMonths("2026-01-01", -1))
+    }
 }
