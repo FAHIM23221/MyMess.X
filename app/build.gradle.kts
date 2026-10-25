@@ -1,8 +1,20 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+// Supabase settings come from environment variables (GitHub Actions secrets)
+// or from an untracked local file "supabase.properties". Nothing is hardcoded.
+val supabaseProps = Properties().apply {
+    val f = rootProject.file("supabase.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
+fun supabaseValue(key: String): String =
+    System.getenv(key)?.takeIf { it.isNotBlank() } ?: supabaseProps.getProperty(key, "")
 
 android {
     namespace = "com.messerp.app"
@@ -14,8 +26,14 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "0.0.1"
+
+        buildConfigField("String", "SUPABASE_URL", "\"${supabaseValue("SUPABASE_URL")}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${supabaseValue("SUPABASE_ANON_KEY")}\"")
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
