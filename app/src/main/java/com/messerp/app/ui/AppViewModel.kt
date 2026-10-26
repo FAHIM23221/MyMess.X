@@ -15,6 +15,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.messerp.app.config.AppConfig
 import com.messerp.app.data.AdminRepository
+import com.messerp.app.data.AppNotification
+import com.messerp.app.data.NoticeRow
+import com.messerp.app.data.NotificationRepository
+import com.messerp.app.data.Notifier
+import com.messerp.app.data.NotifyScheduler
 import com.messerp.app.data.AvatarRepository
 import com.messerp.app.data.ImageUtil
 import com.messerp.app.data.AuthException
@@ -36,6 +41,8 @@ import com.messerp.app.data.Role
 import com.messerp.app.data.SessionStore
 import com.messerp.app.data.Validators
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -52,6 +59,7 @@ sealed interface Screen {
     data object Expenses : Screen
     data object Bills : Screen
     data object Finance : Screen
+    data object Notifications : Screen
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -60,6 +68,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val meals = MealRepository(auth)
     private val ledgerRepo = LedgerRepository(auth)
     private val avatars = AvatarRepository(auth)
+    private val notifs = NotificationRepository(auth)
 
     var screen by mutableStateOf<Screen>(Screen.Splash)
         private set
@@ -105,6 +114,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var lastReceiptNo by mutableStateOf<String?>(null)
         private set
+
+    var notifications by mutableStateOf<List<AppNotification>>(emptyList())
+        private set
+    var noticeHistory by mutableStateOf<List<NoticeRow>>(emptyList())
+        private set
+    val unreadCount: Int get() = notifications.count { !it.read }
+    private var pollJob: Job? = null
+    private var avatarErrorShown = false
 
     val avatarCache = mutableStateMapOf<String, ImageBitmap>()
     private val avatarLoading = mutableSetOf<String>()
@@ -171,6 +188,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun enter(p: Profile) {
         profile = p
         screen = Screen.Home
+        startNotifications()
         try {
             refreshMeal()
         } catch (e: Exception) {
@@ -263,6 +281,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             payments = emptyList()
             lastPaymentId = null
             lastReceiptNo = null
+            stopNotifications()
             go(Screen.Login)
         }
     }
@@ -625,6 +644,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val bytes = avatars.fetch(path)
+                if (bytes == null && !avatarErrorShown) {
+                    avatarErrorShown = true
+                    error("প্রোফাইল ছবি লোড করা যায়নি।")
+                }
                 if (bytes != null) {
                     val bmp = withContext(Dispatchers.Default) {
                         BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
@@ -636,6 +659,74 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } finally {
                 avatarLoading.remove(path)
             }
+        }
+    }
+
+    private val noticeIdem = Idem()
+
+    private fun startNotifications() {
+        val app = getApplication<Application>()
+        NotifyScheduler.start(app)
+        pollJob?.cancel()
+        pollJob = viewModelScope.launch {
+            while (true) {
+                try {
+                    if (Notifier.canPost(app)) {
+                        for (n in notifs.claim(20)) Notifier.show(app, n)
+                    }
+                    notifications = notifs.list(50)
+                } catch (e: Exception) {
+                    // Offline or session issue: try again on the next round.
+                }
+                delay(30_000)
+            }
+        }
+    }
+
+    private fun stopNotifications() {
+        pollJob?.cancel()
+        pollJob = null
+        NotifyScheduler.stop(getApplication<Application>())
+        notifications = emptyList()
+        noticeHistory = emptyList()
+    }
+
+    fun loadNotifications() {
+        launchSafe {
+            notifications = notifs.list(50)
+            if (profile?.role != Role.MEMBER) noticeHistory = notifs.noticeHistory()
+        }
+    }
+
+    fun markRead(id: String) {
+        viewModelScope.launch {
+            try {
+                notifs.markRead(listOf(id))
+                notifications = notifs.list(50)
+            } catch (e: Exception) {
+                // Ignored; it stays unread.
+            }
+        }
+    }
+
+    fun markAllRead() {
+        launchSafe {
+            notifs.markAllRead()
+            notifications = notifs.list(50)
+            note("সব বিজ্ঞপ্তি পড়া হিসেবে চিহ্নিত হয়েছে।")
+        }
+    }
+
+    fun createNotice(title: String, body: String, level: String, audience: String) {
+        if (title.isBlank() || body.isBlank()) return error("শিরোনাম ও বিবরণ লিখুন।")
+        val reqId = noticeIdem.idFor("${title.trim()}|${body.trim()}|$level|$audience")
+        launchSafe {
+            val n = notifs.createNotice(title.trim(), body.trim(), level, audience, reqId)
+            noticeIdem.clear()
+            notifications = notifs.list(50)
+            noticeHistory = notifs.noticeHistory()
+            formVersion++
+            note("নোটিশ পাঠানো হয়েছে। প্রাপক: ${Money.bn(n.toLong())} জন।")
         }
     }
 }

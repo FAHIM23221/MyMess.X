@@ -11,10 +11,10 @@ class AvatarRepository(private val auth: AuthRepository) {
         val up = SupabaseHttp.requestBytes(
             "POST", "/storage/v1/object/avatars/$path", jpeg, "image/jpeg", token, mapOf("x-upsert" to "true")
         )
-        if (up.code !in 200..299) throw AuthException("ছবি আপলোড করা যায়নি।")
+        if (up.code !in 200..299) throw AuthException("ছবি আপলোড করা যায়নি (সার্ভার কোড ${up.code})।")
         val body = JSONObject().put("avatar_url", path).toString()
         val res = SupabaseHttp.request("PATCH", "/rest/v1/profiles?id=eq.$userId", body, token)
-        if (res.code !in 200..299) throw AuthException("ছবি সংরক্ষণ করা যায়নি।")
+        if (res.code !in 200..299) throw AuthException("ছবি সংরক্ষণ করা যায়নি (সার্ভার কোড ${res.code})।")
         return path
     }
 

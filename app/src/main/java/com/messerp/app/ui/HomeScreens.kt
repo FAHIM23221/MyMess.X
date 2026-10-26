@@ -73,7 +73,7 @@ fun AppScaffold(vm: AppViewModel, active: Int, title: String, subtitle: String, 
             verticalArrangement = Arrangement.spacedBy(12.dp),
             content = content
         )
-        BottomBar(active, { vm.go(Screen.Home) }, { vm.go(Screen.Meal) }, { vm.go(Screen.ProfileScreen) }, { vm.comingSoon() })
+        BottomBar(active, vm.unreadCount, { vm.go(Screen.Home) }, { vm.go(Screen.Meal) }, { vm.go(Screen.Notifications) }, { vm.go(Screen.ProfileScreen) })
     }
 }
 
@@ -153,9 +153,10 @@ fun MemberContent(vm: AppViewModel, p: Profile) {
             Tile("ডিউটি", false, soon)
         )
     )
-    AppCard {
+    val latest = vm.notifications.firstOrNull { it.kind == "NOTICE" }
+    AppCard(modifier = Modifier.clickable { vm.go(Screen.Notifications) }) {
         Text("সর্বশেষ নোটিশ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("নোটিশ সুবিধা পরের ধাপে আসছে।", fontWeight = FontWeight.SemiBold)
+        Text(latest?.let { Money.bn(it.title) } ?: "কোনো নোটিশ নেই", fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -199,7 +200,7 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
     tiles.add(Tile("পেমেন্ট ও চার্জ", true) { vm.go(Screen.Finance) })
     tiles.add(Tile("বাজার খরচ ও গেস্ট মিল", true) { vm.go(Screen.Expenses) })
     tiles.add(Tile("মিল ও রেট", true) { vm.go(Screen.Meal) })
-    tiles.add(Tile("নোটিশ দিন", false, soon))
+    tiles.add(Tile("নোটিশ দিন", true) { vm.go(Screen.Notifications) })
     TileGrid(tiles)
 
     Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(12.dp)) {

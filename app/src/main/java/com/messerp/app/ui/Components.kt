@@ -1,6 +1,7 @@
 package com.messerp.app.ui
 
 import androidx.compose.foundation.BorderStroke
+import com.messerp.app.data.Money
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.LaunchedEffect
@@ -143,8 +144,8 @@ fun SectionTitle(text: String) {
 }
 
 @Composable
-fun BottomBar(active: Int, onHome: () -> Unit, onMeal: () -> Unit, onProfile: () -> Unit, onSoon: () -> Unit) {
-    val labels = listOf("হোম", "মিল", "বার্তা", "প্রোফাইল")
+fun BottomBar(active: Int, unread: Int, onHome: () -> Unit, onMeal: () -> Unit, onNotices: () -> Unit, onProfile: () -> Unit) {
+    val labels = listOf("হোম", "মিল", "নোটিশ", "প্রোফাইল")
     val c = MaterialTheme.colorScheme
     Surface(color = c.surface, shadowElevation = 6.dp) {
         Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
@@ -152,8 +153,8 @@ fun BottomBar(active: Int, onHome: () -> Unit, onMeal: () -> Unit, onProfile: ()
                 val action = when (i) {
                     0 -> onHome
                     1 -> onMeal
-                    3 -> onProfile
-                    else -> onSoon
+                    2 -> onNotices
+                    else -> onProfile
                 }
                 val isActive = i == active
                 Column(
@@ -167,7 +168,7 @@ fun BottomBar(active: Int, onHome: () -> Unit, onMeal: () -> Unit, onProfile: ()
                             .background(if (isActive) c.primary else Color.Transparent)
                     )
                     Text(
-                        label,
+                        if (i == 2 && unread > 0) label + " (" + Money.bn(unread.toLong()) + ")" else label,
                         modifier = Modifier.padding(vertical = 14.dp),
                         fontSize = 13.sp,
                         fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,

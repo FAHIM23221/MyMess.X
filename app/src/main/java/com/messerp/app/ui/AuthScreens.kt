@@ -42,7 +42,8 @@ fun Field(
     onChange: (String) -> Unit,
     keyboard: KeyboardType = KeyboardType.Text,
     password: Boolean = false,
-    hint: String = ""
+    hint: String = "",
+    singleLine: Boolean = true
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
@@ -50,7 +51,8 @@ fun Field(
             value = value,
             onValueChange = onChange,
             placeholder = { if (hint.isNotEmpty()) Text(hint) },
-            singleLine = true,
+            singleLine = singleLine,
+            minLines = if (singleLine) 1 else 3,
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else keyboard),
