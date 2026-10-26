@@ -183,6 +183,12 @@ fun LoginScreen(vm: AppViewModel, adminMode: Boolean) {
 fun RegisterScreen(vm: AppViewModel) {
     var name by rememberSaveable { mutableStateOf("") }
     var phone by rememberSaveable { mutableStateOf("") }
+    var fatherName by rememberSaveable { mutableStateOf("") }
+    var fatherPhone by rememberSaveable { mutableStateOf("") }
+    var motherName by rememberSaveable { mutableStateOf("") }
+    var motherPhone by rememberSaveable { mutableStateOf("") }
+    var room by rememberSaveable { mutableStateOf("") }
+    var seat by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var confirm by rememberSaveable { mutableStateOf("") }
     var invite by rememberSaveable { mutableStateOf("") }
@@ -193,6 +199,18 @@ fun RegisterScreen(vm: AppViewModel) {
         Text("অ্যাডমিনের দেওয়া ইনভাইট কোড লাগবে।", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Field("পুরো নাম", name, { name = it })
         Field("ফোন নম্বর", phone, { phone = it }, KeyboardType.Phone, hint = "01XXXXXXXXX")
+        Field("রুম নম্বর", room, { room = it })
+        Field("সিট নম্বর", seat, { seat = it })
+        Text("অভিভাবকের তথ্য", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(
+            "বাবা বা মা, কমপক্ষে একজনের নাম ও ফোন নম্বর দিতে হবে। চাইলে দুজনেরই দিতে পারেন। দিতে না চাইলে মূল অ্যাডমিনের সঙ্গে যোগাযোগ করুন, তিনি বিশেষ কোড দেবেন।",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Field("বাবার নাম", fatherName, { fatherName = it })
+        Field("বাবার ফোন নম্বর", fatherPhone, { fatherPhone = it }, KeyboardType.Phone, hint = "01XXXXXXXXX")
+        Field("মায়ের নাম", motherName, { motherName = it })
+        Field("মায়ের ফোন নম্বর", motherPhone, { motherPhone = it }, KeyboardType.Phone, hint = "01XXXXXXXXX")
         Field("পাসওয়ার্ড (কমপক্ষে ৮ অক্ষর)", password, { password = it }, password = true)
         Field("পাসওয়ার্ড আবার দিন", confirm, { confirm = it }, password = true)
         Field("ইনভাইট কোড", invite, { invite = it })
@@ -200,7 +218,12 @@ fun RegisterScreen(vm: AppViewModel) {
         PrimaryButton(
             text = if (vm.busy) "অপেক্ষা করুন..." else "রেজিস্ট্রেশন",
             enabled = !vm.busy,
-            onClick = { vm.register(name, phone, password, confirm, invite) }
+            onClick = {
+                vm.register(
+                    name, phone, fatherName, fatherPhone, motherName, motherPhone,
+                    room, seat, password, confirm, invite
+                )
+            }
         )
         SecondaryButton("লগইনে ফিরুন") { vm.go(Screen.Login) }
     }

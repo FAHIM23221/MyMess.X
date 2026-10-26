@@ -146,6 +146,7 @@ fun MealScreen(vm: AppViewModel) {
             }
         }
 
+        if (!isAdmin) {
         SectionTitle("আজকের মিল")
         if (status != null) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -192,6 +193,7 @@ fun MealScreen(vm: AppViewModel) {
             }
             Field("কারণ (ঐচ্ছিক)", reason, { reason = it })
             PrimaryButton("মিল বন্ধের অনুরোধ", !vm.busy) { vm.createOff(from, to, b, l, d, reason) }
+        }
         }
     }
 }

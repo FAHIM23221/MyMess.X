@@ -1,5 +1,8 @@
 package com.messerp.app.ui
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.sp
 import com.messerp.app.data.Money
 import com.messerp.app.data.Profile
@@ -93,19 +97,24 @@ fun HomeScreen(vm: AppViewModel) {
             Role.ADMIN -> AdminContent(vm, p, false)
             Role.MAIN_ADMIN -> AdminContent(vm, p, true)
         }
-        MyInfoCard(p)
+        MyInfoCard(vm, p)
     }
 }
 
 @Composable
-fun MyInfoCard(p: Profile) {
+fun MyInfoCard(vm: AppViewModel, p: Profile) {
     AppCard {
-        Text("আমার তথ্য", fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            AvatarCircle(vm, p.avatarUrl, p.fullName, 48.dp)
+            Text("আমার তথ্য", fontWeight = FontWeight.Bold)
+        }
         KeyValue("সদস্য আইডি", p.memberCode)
         KeyValue("রোল", roleLabel(p.role))
-        KeyValue("রুম / সিট", "${p.roomNo ?: "—"} / ${p.seatNo ?: "—"}")
+        if (p.role == Role.MEMBER) {
+            KeyValue("রুম / সিট", "${p.roomNo ?: "—"} / ${p.seatNo ?: "—"}")
+            KeyValue("ম্যানেজার", if (p.isCurrentManager) "হ্যাঁ" else "না")
+        }
         KeyValue("যোগদান", p.joinDate)
-        KeyValue("ম্যানেজার", if (p.isCurrentManager) "হ্যাঁ" else "না")
     }
 }
 
@@ -183,13 +192,24 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
 
     SectionTitle("দ্রুত কাজ")
     val tiles = mutableListOf(Tile("নতুন সদস্যের কোড", !vm.busy) { vm.createInvite(Role.MEMBER) })
-    if (isMain) tiles.add(Tile("নতুন অ্যাডমিনের কোড", !vm.busy) { vm.createInvite(Role.ADMIN) })
+    if (isMain) {
+        tiles.add(Tile("নতুন অ্যাডমিনের কোড", !vm.busy) { vm.createInvite(Role.ADMIN) })
+        tiles.add(Tile("অভিভাবক ছাড়ের সদস্য কোড", !vm.busy) { vm.createInvite(Role.MEMBER, true) })
+    }
     tiles.add(Tile("পেমেন্ট ও চার্জ", true) { vm.go(Screen.Finance) })
-    tiles.add(Tile("আমার ব্যালেন্স", true) { vm.openBills() })
     tiles.add(Tile("বাজার খরচ ও গেস্ট মিল", true) { vm.go(Screen.Expenses) })
     tiles.add(Tile("মিল ও রেট", true) { vm.go(Screen.Meal) })
     tiles.add(Tile("নোটিশ দিন", false, soon))
     TileGrid(tiles)
+
+    Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(12.dp)) {
+        Text(
+            "অ্যাডমিন প্যানেলে নিজের কোনো মিল বা হিসাব থাকে না। নিজের হিসাব দেখতে অন্য একটি ফোন নম্বরে আলাদা সদস্য অ্যাকাউন্ট খুলুন।",
+            modifier = Modifier.padding(12.dp),
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+    }
 
     vm.lastInvite?.let { code ->
         AppCard {
@@ -234,8 +254,17 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
     SectionTitle("সদস্য তালিকা")
     vm.members.forEach { m ->
         AppCard {
-            Text("${m.fullName} (${m.memberCode})", fontWeight = FontWeight.Bold)
-            Text(m.phone, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                AvatarCircle(vm, m.avatarUrl, m.fullName, 44.dp)
+                Column {
+                    Text("${m.fullName} (${m.memberCode})", fontWeight = FontWeight.Bold)
+                    Text(m.phone, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (m.role == Role.MEMBER) Text("রুম ${m.roomNo ?: "—"}, সিট ${m.seatNo ?: "—"}", fontSize = 12.sp)
+            if (m.fatherName != null) Text("বাবা: ${m.fatherName} (${m.fatherPhone})", fontSize = 12.sp)
+            if (m.motherName != null) Text("মা: ${m.motherName} (${m.motherPhone})", fontSize = 12.sp)
+            if (m.guardianWaived) Text("অভিভাবকের তথ্য ছাড়ের আওতায়", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 4.dp)) {
                 StatusChip(roleLabel(m.role), positive = m.role != Role.MEMBER)
                 StatusChip(if (m.isActive) "সক্রিয়" else "স্থগিত", positive = m.isActive)
@@ -288,36 +317,51 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
 fun ProfileScreen(vm: AppViewModel) {
     val p = vm.profile ?: return
     var name by rememberSaveable(p.id) { mutableStateOf(p.fullName) }
+    var fatherName by rememberSaveable(p.id) { mutableStateOf(p.fatherName ?: "") }
+    var fatherPhone by rememberSaveable(p.id) { mutableStateOf(p.fatherPhone ?: "") }
+    var motherName by rememberSaveable(p.id) { mutableStateOf(p.motherName ?: "") }
+    var motherPhone by rememberSaveable(p.id) { mutableStateOf(p.motherPhone ?: "") }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) vm.uploadAvatar(uri)
+    }
     AppScaffold(vm, 3, "প্রোফাইল", "আমার তথ্য") {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Box(
-                modifier = Modifier.size(72.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    p.fullName.take(1).uppercase(),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            AvatarCircle(vm, p.avatarUrl, p.fullName, 72.dp)
             Column {
                 Text(p.fullName, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Text("সদস্য আইডি: ${p.memberCode}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        OutlinedButton(
+            onClick = { picker.launch("image/*") },
+            enabled = !vm.busy,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) { Text(if (p.avatarUrl == null) "প্রোফাইল ছবি যোগ করুন" else "প্রোফাইল ছবি বদলান") }
         AppCard {
             KeyValue("ফোন", p.phone)
-            KeyValue("রুম নং", p.roomNo ?: "—")
-            KeyValue("সিট নং", p.seatNo ?: "—")
+            if (p.role == Role.MEMBER) {
+                KeyValue("রুম নং", p.roomNo ?: "—")
+                KeyValue("সিট নং", p.seatNo ?: "—")
+            }
             KeyValue("যোগদান", p.joinDate)
             KeyValue("অবস্থা", if (p.isActive) "সক্রিয়" else "স্থগিত")
             KeyValue("রোল", roleLabel(p.role))
-            KeyValue("বর্তমান ম্যানেজার", if (p.isCurrentManager) "হ্যাঁ" else "না")
+            if (p.role == Role.MEMBER) KeyValue("বর্তমান ম্যানেজার", if (p.isCurrentManager) "হ্যাঁ" else "না")
         }
+        SectionTitle("তথ্য সম্পাদনা")
         Field("নাম", name, { name = it })
+        Field("বাবার নাম", fatherName, { fatherName = it })
+        Field("বাবার ফোন নম্বর", fatherPhone, { fatherPhone = it }, KeyboardType.Phone, hint = "01XXXXXXXXX")
+        Field("মায়ের নাম", motherName, { motherName = it })
+        Field("মায়ের ফোন নম্বর", motherPhone, { motherPhone = it }, KeyboardType.Phone, hint = "01XXXXXXXXX")
+        Text(
+            "বাবা বা মায়ের কমপক্ষে একজনের তথ্য থাকতে হবে। রুম ও সিট বদলাতে অ্যাডমিনকে বলুন।",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         MessageText(vm)
-        PrimaryButton("নাম সংরক্ষণ", !vm.busy) { vm.saveName(name) }
+        PrimaryButton("তথ্য সংরক্ষণ", !vm.busy) { vm.saveProfile(name, fatherName, fatherPhone, motherName, motherPhone) }
         SectionTitle("সেটিংস")
         ControlRow("ভাষা (বাংলা / English)") { vm.comingSoon() }
         ControlRow("থিম") { vm.comingSoon() }
