@@ -20,6 +20,8 @@ import com.messerp.app.data.NoticeRow
 import com.messerp.app.data.NotificationRepository
 import com.messerp.app.data.Notifier
 import com.messerp.app.data.NotifyScheduler
+import com.messerp.app.data.Push
+import com.messerp.app.data.PushRepository
 import com.messerp.app.data.AvatarRepository
 import com.messerp.app.data.ImageUtil
 import com.messerp.app.data.AuthException
@@ -69,6 +71,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val ledgerRepo = LedgerRepository(auth)
     private val avatars = AvatarRepository(auth)
     private val notifs = NotificationRepository(auth)
+    private val pushRepo = PushRepository(auth)
 
     var screen by mutableStateOf<Screen>(Screen.Splash)
         private set
@@ -122,6 +125,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val unreadCount: Int get() = notifications.count { !it.read }
     private var pollJob: Job? = null
     private var avatarErrorShown = false
+    var popupQueue by mutableStateOf<List<AppNotification>>(emptyList())
+        private set
+    var headlineEnabled by mutableStateOf(false)
+        private set
+    var headlineText by mutableStateOf("")
+        private set
 
     val avatarCache = mutableStateMapOf<String, ImageBitmap>()
     private val avatarLoading = mutableSetOf<String>()
@@ -266,6 +275,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun logout() {
         viewModelScope.launch {
+            try {
+                Push.tokenOrNull(getApplication<Application>())?.let { pushRepo.unregisterToken(it) }
+            } catch (e: Exception) {
+                // The server removes dead tokens by itself later.
+            }
             auth.signOut()
             profile = null
             members = emptyList()
@@ -667,6 +681,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun startNotifications() {
         val app = getApplication<Application>()
         NotifyScheduler.start(app)
+        viewModelScope.launch {
+            try {
+                Push.tokenOrNull(app)?.let { pushRepo.registerToken(it) }
+            } catch (e: Exception) {
+                // Instant push is optional; polling still works.
+            }
+        }
         pollJob?.cancel()
         pollJob = viewModelScope.launch {
             while (true) {
@@ -675,6 +696,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         for (n in notifs.claim(20)) Notifier.show(app, n)
                     }
                     notifications = notifs.list(50)
+                    popupQueue = notifs.popups()
+                    val h = notifs.headline()
+                    headlineEnabled = h.first
+                    headlineText = h.second
                 } catch (e: Exception) {
                     // Offline or session issue: try again on the next round.
                 }
@@ -689,6 +714,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         NotifyScheduler.stop(getApplication<Application>())
         notifications = emptyList()
         noticeHistory = emptyList()
+        popupQueue = emptyList()
+        headlineEnabled = false
+        headlineText = ""
     }
 
     fun loadNotifications() {
@@ -717,16 +745,52 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun createNotice(title: String, body: String, level: String, audience: String) {
-        if (title.isBlank() || body.isBlank()) return error("শিরোনাম ও বিবরণ লিখুন।")
-        val reqId = noticeIdem.idFor("${title.trim()}|${body.trim()}|$level|$audience")
+    fun createNotice(title: String, body: String, level: String, audience: String, type: String, popup: Boolean) {
+        val t = title.trim().ifEmpty { if (type == "EMERGENCY_MEETING") "জরুরি মিটিং" else "" }
+        if (t.isEmpty() || body.isBlank()) return error("শিরোনাম ও বিবরণ লিখুন।")
+        val reqId = noticeIdem.idFor("$t|${body.trim()}|$level|$audience|$type|$popup")
         launchSafe {
-            val n = notifs.createNotice(title.trim(), body.trim(), level, audience, reqId)
+            val result = notifs.createNotice(t, body.trim(), level, audience, type, popup, reqId)
             noticeIdem.clear()
             notifications = notifs.list(50)
             noticeHistory = notifs.noticeHistory()
             formVersion++
-            note("নোটিশ পাঠানো হয়েছে। প্রাপক: ${Money.bn(n.toLong())} জন।")
+            val pushResult = try {
+                pushRepo.sendNotice(result.first)
+            } catch (e: Exception) {
+                null
+            }
+            val tail = if (pushResult == null) {
+                " তাৎক্ষণিক পুশ সেটআপ বাকি, তাই ফোনে সর্বোচ্চ ১৫ মিনিটে পৌঁছাবে।"
+            } else {
+                " পুশ গেছে " + Money.bn(pushResult.sent.toLong()) + " জনের ফোনে" +
+                    (if (pushResult.noToken > 0) "; " + Money.bn(pushResult.noToken.toLong()) + " জনের ফোন এখনো নিবন্ধিত নয় (সর্বোচ্চ ১৫ মিনিটে পাবেন)" else "") + "।"
+            }
+            note("নোটিশ পাঠানো হয়েছে। প্রাপক: " + Money.bn(result.second.toLong()) + " জন।" + tail)
+        }
+    }
+
+    fun dismissPopup(id: String) {
+        popupQueue = popupQueue.filter { it.id != id }
+        viewModelScope.launch {
+            try {
+                notifs.markPopupSeen(id)
+                notifications = notifs.list(50)
+            } catch (e: Exception) {
+                // It may appear again at the next check.
+            }
+        }
+    }
+
+    fun saveHeadline(text: String, enabled: Boolean) {
+        val t = text.trim()
+        if (t.length > 200) return error("হেডলাইন সর্বোচ্চ ২০০ অক্ষরের হতে পারে।")
+        if (enabled && t.isEmpty()) return error("হেডলাইন চালু করতে আগে লেখা দিন।")
+        launchSafe {
+            notifs.setHeadline(t, enabled)
+            headlineText = t
+            headlineEnabled = enabled
+            note(if (enabled) "স্ক্রলিং হেডলাইন চালু হয়েছে।" else "স্ক্রলিং হেডলাইন বন্ধ হয়েছে।")
         }
     }
 }

@@ -2,11 +2,16 @@ package com.messerp.app.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -19,8 +24,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.messerp.app.data.AppNotification
 import com.messerp.app.data.Money
 import com.messerp.app.data.Notifier
+import com.messerp.app.data.Push
 import com.messerp.app.data.ReceiptPdf
 import com.messerp.app.data.Role
 
@@ -36,15 +43,44 @@ private fun audienceLabel(a: String) = when (a) {
     else -> "সব সদস্য"
 }
 
+private const val MEETING = "EMERGENCY_MEETING"
+
+/** Shown on the Home page when the app is opened and an admin marked a notice as a pop-up. */
+@Composable
+fun NoticePopup(n: AppNotification, onDismiss: () -> Unit) {
+    val meeting = n.kind == "MEETING"
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text((if (meeting) "জরুরি মিটিং: " else "নোটিশ: ") + Money.bn(n.title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(Money.bn(n.body))
+                Text(
+                    ReceiptPdf.formatLocal(n.createdLocal),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("বুঝেছি") } }
+    )
+}
+
 @Composable
 fun NotificationsScreen(vm: AppViewModel) {
     val p = vm.profile ?: return
     val isAdmin = p.role != Role.MEMBER
+    val context = LocalContext.current
+    var type by rememberSaveable(vm.formVersion) { mutableStateOf("NORMAL") }
     var title by rememberSaveable(vm.formVersion) { mutableStateOf("") }
     var body by rememberSaveable(vm.formVersion) { mutableStateOf("") }
+    var meetTime by rememberSaveable(vm.formVersion) { mutableStateOf("") }
+    var meetPlace by rememberSaveable(vm.formVersion) { mutableStateOf("") }
     var level by rememberSaveable(vm.formVersion) { mutableStateOf("NORMAL") }
     var audience by rememberSaveable(vm.formVersion) { mutableStateOf("MEMBERS") }
-    val context = LocalContext.current
+    var popup by rememberSaveable(vm.formVersion) { mutableStateOf(false) }
+    var hText by rememberSaveable(vm.headlineText) { mutableStateOf(vm.headlineText) }
+    var hOn by rememberSaveable(vm.headlineEnabled) { mutableStateOf(vm.headlineEnabled) }
 
     LaunchedEffect(Unit) { vm.loadNotifications() }
 
@@ -57,6 +93,13 @@ fun NotificationsScreen(vm: AppViewModel) {
                     fontSize = 13.sp
                 )
             }
+        }
+        AppCard {
+            Text("তাৎক্ষণিক পুশ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                if (Push.available(context)) "এই ফোনে চালু আছে" else "এই অ্যাপ সংস্করণে সেটআপ বাকি। আপাতত বিজ্ঞপ্তি সর্বোচ্চ ১৫ মিনিটে ফোনে পৌঁছায়।",
+                fontWeight = FontWeight.SemiBold
+            )
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -74,39 +117,91 @@ fun NotificationsScreen(vm: AppViewModel) {
         vm.notifications.forEach { n ->
             AppCard(modifier = Modifier.clickable { if (!n.read) vm.markRead(n.id) }) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    StatusChip(levelLabel(n.level), positive = !n.read)
+                    StatusChip(if (n.kind == "MEETING") "জরুরি মিটিং" else levelLabel(n.level), positive = !n.read)
                     Text(ReceiptPdf.formatLocal(n.createdLocal), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Text(
-                    Money.bn(n.title),
-                    fontWeight = if (n.read) FontWeight.Normal else FontWeight.Bold
-                )
+                Text(Money.bn(n.title), fontWeight = if (n.read) FontWeight.Normal else FontWeight.Bold)
                 Text(Money.bn(n.body), fontSize = 13.sp)
             }
         }
 
         if (isAdmin) {
-            SectionTitle("নতুন নোটিশ দিন")
+            SectionTitle("স্ক্রলিং হেডলাইন (হোম পেজের উপরে)")
             AppCard {
-                Field("শিরোনাম", title, { title = it })
-                Field("বিবরণ", body, { body = it }, singleLine = false)
-                Text("গুরুত্ব", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("হেডলাইন", fontWeight = FontWeight.Bold)
+                        Text(if (hOn) "চালু" else "বন্ধ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = hOn, onCheckedChange = { hOn = it })
+                }
+                Field("হেডলাইনের লেখা (সর্বোচ্চ ২০০ অক্ষর)", hText, { hText = it })
+                PrimaryButton("হেডলাইন সংরক্ষণ", !vm.busy) { vm.saveHeadline(hText, hOn) }
+                Text(
+                    "চালু থাকলে সবার হোম পেজের উপরে লেখাটি ডান থেকে বামে চলতে থাকবে।",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            SectionTitle("নতুন নোটিফিকেশন পাঠান")
+            AppCard {
+                Text("ধরন", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("NORMAL", "IMPORTANT", "EMERGENCY").forEach { l -> ChoiceChip(levelLabel(l), level == l) { level = l } }
+                    ChoiceChip("সাধারণ নোটিফিকেশন", type == "NORMAL") { type = "NORMAL" }
+                    ChoiceChip("জরুরি মিটিং", type == MEETING) { type = MEETING }
+                }
+                Field(if (type == MEETING) "শিরোনাম (ফাঁকা রাখলে \"জরুরি মিটিং\")" else "শিরোনাম", title, { title = it })
+                if (type == MEETING) {
+                    Field("মিটিংয়ের সময়", meetTime, { meetTime = it })
+                    Field("স্থান", meetPlace, { meetPlace = it })
+                    Field("অতিরিক্ত বিবরণ (ঐচ্ছিক)", body, { body = it }, singleLine = false)
+                    Text(
+                        "জরুরি মিটিং সবসময় পপ-আপ হয়। বিজ্ঞপ্তি পেলে সমর্থিত Android ফোন ৩ সেকেন্ড ভাইব্রেট করে (ফোন সাইলেন্ট বা ভাইব্রেশন বন্ধ থাকলে নাও করতে পারে)।",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Field("বিবরণ", body, { body = it }, singleLine = false)
+                    Text("গুরুত্ব", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("NORMAL", "IMPORTANT", "EMERGENCY").forEach { l -> ChoiceChip(levelLabel(l), level == l) { level = l } }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = popup, onCheckedChange = { popup = it })
+                        Text("অ্যাপ খুললে Home পেজে পপ-আপ দেখান")
+                    }
                 }
                 Text("কারা পাবে", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("MEMBERS", "ADMINS", "EVERYONE").forEach { a -> ChoiceChip(audienceLabel(a), audience == a) { audience = a } }
                 }
-                PrimaryButton("নোটিশ পাঠান", !vm.busy) { vm.createNotice(title, body, level, audience) }
+                PrimaryButton(if (type == MEETING) "জরুরি মিটিং নোটিফিকেশন পাঠান" else "নোটিফিকেশন পাঠান", !vm.busy) {
+                    val finalBody = if (type == MEETING) {
+                        buildString {
+                            if (meetTime.isNotBlank()) append("সময়: ").append(meetTime.trim()).append('\n')
+                            if (meetPlace.isNotBlank()) append("স্থান: ").append(meetPlace.trim()).append('\n')
+                            append(body.trim())
+                        }.trim()
+                    } else {
+                        body
+                    }
+                    vm.createNotice(title, finalBody, if (type == MEETING) "EMERGENCY" else level, audience, type, popup)
+                }
             }
+
             SectionTitle("পাঠানো নোটিশের ইতিহাস")
             if (vm.noticeHistory.isEmpty()) Text("এখনো কোনো নোটিশ পাঠানো হয়নি।", color = MaterialTheme.colorScheme.onSurfaceVariant)
             vm.noticeHistory.forEach { h ->
                 AppCard {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        StatusChip(levelLabel(h.level))
+                        StatusChip(if (h.noticeType == MEETING) "জরুরি মিটিং" else levelLabel(h.level))
                         Text(audienceLabel(h.audience), fontSize = 12.sp)
+                        if (h.showPopup) Text("পপ-আপ", fontSize = 12.sp)
                     }
                     Text(h.title, fontWeight = FontWeight.Bold)
                     Text(ReceiptPdf.formatLocal(h.createdLocal), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

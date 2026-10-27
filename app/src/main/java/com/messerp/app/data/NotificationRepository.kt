@@ -19,6 +19,8 @@ data class NoticeRow(
     val body: String,
     val level: String,
     val audience: String,
+    val noticeType: String,
+    val showPopup: Boolean,
     val createdLocal: String,
     val recipients: Int,
     val delivered: Int,
@@ -46,6 +48,7 @@ class NotificationRepository(private val auth: AuthRepository) {
             msg.contains("forbidden") -> "এই কাজের অনুমতি আপনার নেই।"
             msg.contains("invalid_title") -> "শিরোনাম ১ থেকে ১২০ অক্ষরের হতে হবে।"
             msg.contains("invalid_body") -> "বিবরণ ১ থেকে ১০০০ অক্ষরের হতে হবে।"
+            msg.contains("invalid_value") -> "মান সঠিক নয়। হেডলাইন চালু করতে লেখা থাকতে হবে (সর্বোচ্চ ২০০ অক্ষর)।"
             msg.contains("too_many_requests") -> "আজ অনেক নোটিশ পাঠানো হয়েছে। কাল আবার চেষ্টা করুন।"
             msg.contains("duplicate_request") -> "এই নোটিশ আগেই পাঠানো হয়েছে।"
             else -> "কাজটি সম্পন্ন হয়নি।"
@@ -71,6 +74,17 @@ class NotificationRepository(private val auth: AuthRepository) {
         return parseList(res.body)
     }
 
+    suspend fun popups(): List<AppNotification> {
+        val res = call("/rest/v1/rpc/get_my_popups", "{}")
+        if (res.code !in 200..299) fail(res)
+        return parseList(res.body)
+    }
+
+    suspend fun markPopupSeen(id: String) {
+        val res = call("/rest/v1/rpc/mark_popup_seen", JSONObject().put("p_id", id).toString())
+        if (res.code !in 200..299) fail(res)
+    }
+
     suspend fun markRead(ids: List<String>) {
         val res = call("/rest/v1/rpc/mark_notifications_read", JSONObject().put("p_ids", JSONArray(ids)).toString())
         if (res.code !in 200..299) fail(res)
@@ -81,12 +95,18 @@ class NotificationRepository(private val auth: AuthRepository) {
         if (res.code !in 200..299) fail(res)
     }
 
-    suspend fun createNotice(title: String, body: String, level: String, audience: String, requestId: String): Int {
+    /** Returns (noticeId, recipientCount). */
+    suspend fun createNotice(
+        title: String, body: String, level: String, audience: String,
+        type: String, popup: Boolean, requestId: String
+    ): Pair<String, Int> {
         val json = JSONObject().put("p_title", title).put("p_body", body).put("p_level", level)
-            .put("p_audience", audience).put("p_request_id", requestId).toString()
+            .put("p_audience", audience).put("p_request_id", requestId)
+            .put("p_type", type).put("p_popup", popup).toString()
         val res = call("/rest/v1/rpc/create_notice", json)
         if (res.code !in 200..299) fail(res)
-        return res.body.trim().toIntOrNull() ?: 0
+        val o = JSONObject(res.body)
+        return Pair(o.getString("notice_id"), o.getInt("recipients"))
     }
 
     suspend fun noticeHistory(): List<NoticeRow> {
@@ -98,9 +118,23 @@ class NotificationRepository(private val auth: AuthRepository) {
             NoticeRow(
                 id = o.getString("id"), title = o.getString("title"), body = o.getString("body"),
                 level = o.getString("level"), audience = o.getString("audience"),
+                noticeType = o.optString("notice_type", "NORMAL"), showPopup = o.optBoolean("show_popup", false),
                 createdLocal = o.getString("created_local"),
                 recipients = o.getInt("recipients"), delivered = o.getInt("delivered"), readCount = o.getInt("read_count")
             )
         }
+    }
+
+    /** Returns (enabled, text). */
+    suspend fun headline(): Pair<Boolean, String> {
+        val res = call("/rest/v1/rpc/get_headline", "{}")
+        if (res.code !in 200..299) fail(res)
+        val o = JSONObject(res.body)
+        return Pair(o.optBoolean("enabled", false), o.optString("text", ""))
+    }
+
+    suspend fun setHeadline(text: String, enabled: Boolean) {
+        val res = call("/rest/v1/rpc/set_headline", JSONObject().put("p_text", text).put("p_enabled", enabled).toString())
+        if (res.code !in 200..299) fail(res)
     }
 }

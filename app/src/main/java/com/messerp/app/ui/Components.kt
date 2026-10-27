@@ -1,6 +1,22 @@
 package com.messerp.app.ui
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import com.messerp.app.data.Money
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.shape.CircleShape
@@ -223,6 +239,46 @@ fun AvatarCircle(vm: AppViewModel, path: String?, name: String, size: Dp) {
                 color = MaterialTheme.colorScheme.onPrimary,
                 fontSize = (size.value * 0.4f).sp,
                 fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+/** Admin-controlled headline that keeps moving from right to left. */
+@Composable
+fun ScrollingHeadline(text: String) {
+    val c = MaterialTheme.colorScheme
+    var boxW by remember { mutableIntStateOf(0) }
+    var textW by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    val transition = rememberInfiniteTransition(label = "headline")
+    val distancePx = (boxW + textW).toFloat()
+    val durationMs = if (boxW == 0 || textW == 0) 4000
+    else ((distancePx / density.density) / 60f * 1000f).toInt().coerceAtLeast(3000)
+    val x by transition.animateFloat(
+        initialValue = boxW.toFloat(),
+        targetValue = -textW.toFloat(),
+        animationSpec = infiniteRepeatable(animation = tween(durationMillis = durationMs, easing = LinearEasing)),
+        label = "headlineX"
+    )
+    Surface(color = c.primaryContainer, modifier = Modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clipToBounds()
+                .onSizeChanged { boxW = it.width }
+                .padding(vertical = 8.dp)
+        ) {
+            Text(
+                text,
+                maxLines = 1,
+                softWrap = false,
+                color = c.onPrimaryContainer,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .wrapContentWidth(align = Alignment.Start, unbounded = true)
+                    .onSizeChanged { textW = it.width }
+                    .offset { IntOffset(x.roundToInt(), 0) }
             )
         }
     }

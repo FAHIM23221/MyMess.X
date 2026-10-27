@@ -12,16 +12,24 @@ import com.messerp.app.config.AppConfig
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-/** Runs about every 15 minutes (Android's minimum) and shows any new notifications while the app is closed. */
+/** Shows every notification that has not yet been shown on this phone. Used by the worker and by instant push. */
+object NotifySync {
+    suspend fun run(ctx: Context): Int {
+        if (!AppConfig.isSupabaseConfigured) return 0
+        val store = SessionStore(ctx)
+        if (store.load() == null) return 0
+        if (!Notifier.canPost(ctx)) return 0
+        val items = NotificationRepository(AuthRepository(store)).claim(20)
+        for (n in items) Notifier.show(ctx, n)
+        return items.size
+    }
+}
+
+/** Runs about every 15 minutes (Android's minimum) as a safety net when instant push is not available. */
 class NotifyWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result {
-        if (!AppConfig.isSupabaseConfigured) return Result.success()
-        val store = SessionStore(applicationContext)
-        if (store.load() == null) return Result.success()
-        if (!Notifier.canPost(applicationContext)) return Result.success()
         return try {
-            val repo = NotificationRepository(AuthRepository(store))
-            for (n in repo.claim(20)) Notifier.show(applicationContext, n)
+            NotifySync.run(applicationContext)
             Result.success()
         } catch (e: IOException) {
             Result.retry()

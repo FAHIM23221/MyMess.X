@@ -61,9 +61,17 @@ fun HeaderBar(title: String, subtitle: String) {
 }
 
 @Composable
-fun AppScaffold(vm: AppViewModel, active: Int, title: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) {
+fun AppScaffold(
+    vm: AppViewModel,
+    active: Int,
+    title: String,
+    subtitle: String,
+    headline: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit
+) {
     Column(modifier = Modifier.fillMaxSize()) {
         HeaderBar(title, subtitle)
+        if (headline && vm.headlineEnabled && vm.headlineText.isNotBlank()) ScrollingHeadline(vm.headlineText)
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -90,7 +98,7 @@ fun HomeScreen(vm: AppViewModel) {
         Role.ADMIN -> "অ্যাডমিন প্যানেল"
         Role.MAIN_ADMIN -> "মূল অ্যাডমিন"
     }
-    AppScaffold(vm, 0, title, subtitle) {
+    AppScaffold(vm, 0, title, subtitle, headline = true) {
         MessageText(vm)
         when (p.role) {
             Role.MEMBER -> MemberContent(vm, p)
@@ -99,6 +107,7 @@ fun HomeScreen(vm: AppViewModel) {
         }
         MyInfoCard(vm, p)
     }
+    vm.popupQueue.firstOrNull()?.let { n -> NoticePopup(n) { vm.dismissPopup(n.id) } }
 }
 
 @Composable
