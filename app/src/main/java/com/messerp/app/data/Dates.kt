@@ -42,4 +42,38 @@ object Dates {
         c.add(Calendar.MONTH, n)
         return format(c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, 1)
     }
+
+    private val BN_MONTHS = listOf(
+        "জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন",
+        "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"
+    )
+
+    /** "2026-10-25" -> "২৫ অক্টোবর ২০২৬" */
+    fun bnDate(date: String): String {
+        val p = date.split("-")
+        if (p.size != 3) return Money.bn(date)
+        val m = p[1].toIntOrNull() ?: return Money.bn(date)
+        val d = p[2].toIntOrNull() ?: return Money.bn(date)
+        if (m !in 1..12) return Money.bn(date)
+        return Money.bn(d.toString()) + " " + BN_MONTHS[m - 1] + " " + Money.bn(p[0])
+    }
+
+    /** "2026-10-01" -> "অক্টোবর ২০২৬" */
+    fun bnMonth(date: String): String {
+        val p = date.split("-")
+        if (p.size < 2) return Money.bn(date)
+        val m = p[1].toIntOrNull() ?: return Money.bn(date)
+        if (m !in 1..12) return Money.bn(date)
+        return BN_MONTHS[m - 1] + " " + Money.bn(p[0])
+    }
+
+    /** Current time in Dhaka as "yyyy-MM-dd HH:mm". */
+    fun nowDhakaLocal(): String {
+        val c = Calendar.getInstance(DHAKA)
+        return String.format(
+            Locale.US, "%04d-%02d-%02d %02d:%02d",
+            c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH),
+            c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE)
+        )
+    }
 }

@@ -49,9 +49,11 @@ class MoneyTest {
     }
 
     @Test fun receiptTimeIsLocalAndBengali() {
-        assertEquals("২০২৬-১০-২৫, রাত ৯:৩৬", ReceiptPdf.formatLocal("2026-10-25 21:36"))
-        assertEquals("২০২৬-১০-২৫, সকাল ৮:০৫", ReceiptPdf.formatLocal("2026-10-25 08:05"))
-        assertEquals("২০২৬-১০-২৫, দুপুর ১২:১০", ReceiptPdf.formatLocal("2026-10-25 12:10"))
-        assertEquals("২০২৬-১০-২৫, রাত ১২:০৫", ReceiptPdf.formatLocal("2026-10-25 00:05"))
+        assertEquals("২৫ অক্টোবর ২০২৬, রাত ৯:৩৬", ReceiptPdf.formatLocal("2026-10-25 21:36"))
+        assertEquals("২৫ অক্টোবর ২০২৬, সকাল ৮:০৫", ReceiptPdf.formatLocal("2026-10-25 08:05"))
+        assertEquals("২৫ অক্টোবর ২০২৬, দুপুর ১২:১০", ReceiptPdf.formatLocal("2026-10-25 12:10"))
+        assertEquals("২৫ অক্টোবর ২০২৬, রাত ১২:০৫", ReceiptPdf.formatLocal("2026-10-25 00:05"))
+        assertEquals("১ নভেম্বর ২০২৬", Dates.bnDate("2026-11-01"))
+        assertEquals("অক্টোবর ২০২৬", Dates.bnMonth("2026-10-01"))
     }
 }

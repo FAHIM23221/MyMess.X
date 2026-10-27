@@ -55,7 +55,7 @@ fun MonthBar(vm: AppViewModel) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         OutlinedButton(onClick = { vm.shiftMonth(-1) }, enabled = !vm.busy) { Text("‹") }
-        Text("মাস: " + Money.bn(vm.ledgerMonth.take(7)), fontWeight = FontWeight.Bold)
+        Text("মাস: " + Dates.bnMonth(vm.ledgerMonth), fontWeight = FontWeight.Bold)
         OutlinedButton(onClick = { vm.shiftMonth(1) }, enabled = !vm.busy) { Text("›") }
     }
 }
@@ -96,7 +96,7 @@ fun LedgerView(
         AppCard {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 StatusChip(catLabel(e.category), positive = e.kind == "PAYMENT")
-                Text(Money.bn(e.entryDate), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(Dates.bnDate(e.entryDate), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (!e.description.isNullOrBlank()) Text(e.description)
             when (e.kind) {
@@ -282,7 +282,7 @@ fun FinanceScreen(vm: AppViewModel) {
             val who = vm.members.firstOrNull { it.id == pm.memberId }?.fullName ?: "সদস্য"
             AppCard {
                 Text("$who: ${Money.format(pm.amountMinor)}", fontWeight = FontWeight.Bold)
-                Text("${pm.receiptNo} · ${ReceiptPdf.methodLabel(pm.method)} · ${Money.bn(pm.paidDate)}", fontSize = 12.sp)
+                Text("${pm.receiptNo} · ${ReceiptPdf.methodLabel(pm.method)} · ${Dates.bnDate(pm.paidDate)}", fontSize = 12.sp)
                 if (pm.status == "REVERSED") StatusChip("বাতিল")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { vm.downloadReceipt(pm.id) }, enabled = !vm.busy) { Text("রসিদ ডাউনলোড") }

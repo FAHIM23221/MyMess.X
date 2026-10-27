@@ -77,7 +77,7 @@ fun DateField(label: String, value: String, onPick: (String) -> Unit) {
             },
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth()
-        ) { Text(Money.bn(value)) }
+        ) { Text(Dates.bnDate(value)) }
     }
 }
 
@@ -118,7 +118,7 @@ fun MealScreen(vm: AppViewModel) {
             if (summary != null) {
                 Text("মোট বাজার খরচ ${Money.format(summary.totalExpenseMinor)} ÷ মোট মিল ${Money.bn(summary.totalMeals)}", fontSize = 13.sp)
                 Text(
-                    "${Money.bn(summary.monthStart)} থেকে ${Money.bn(summary.through)} পর্যন্ত",
+                    "${Dates.bnDate(summary.monthStart)} থেকে ${Dates.bnDate(summary.through)} পর্যন্ত",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -167,7 +167,7 @@ fun MealScreen(vm: AppViewModel) {
         } else {
             status.periods.forEach { o ->
                 AppCard {
-                    Text("${Money.bn(o.from)} থেকে ${Money.bn(o.to)}", fontWeight = FontWeight.Bold)
+                    Text("${Dates.bnDate(o.from)} থেকে ${Dates.bnDate(o.to)}", fontWeight = FontWeight.Bold)
                     val slots = listOfNotNull(
                         if (o.breakfast) "সকাল" else null,
                         if (o.lunch) "দুপুর" else null,
@@ -250,7 +250,7 @@ fun ExpensesScreen(vm: AppViewModel) {
             AppCard {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     StatusChip(categoryLabel(e.category), positive = !e.voided)
-                    Text(Money.bn(e.date), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(Dates.bnDate(e.date), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text(e.description, fontWeight = FontWeight.SemiBold)
                 Text(
@@ -289,7 +289,7 @@ fun ExpensesScreen(vm: AppViewModel) {
             val host = vm.members.firstOrNull { it.id == g.memberId }?.fullName ?: "সদস্য"
             AppCard {
                 Text("$host: ${Money.bn(g.count.toLong())} জন, ${slotLabel(g.slot)}", fontWeight = FontWeight.SemiBold)
-                Text(Money.bn(g.date), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(Dates.bnDate(g.date), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedButton(onClick = { voidGuestId = g.id }, enabled = !vm.busy) { Text("বাতিল করুন") }
             }
         }

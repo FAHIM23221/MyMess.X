@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.sp
+import com.messerp.app.data.Dates
 import com.messerp.app.data.Money
 import com.messerp.app.data.Profile
 import com.messerp.app.data.Role
@@ -123,7 +124,7 @@ fun MyInfoCard(vm: AppViewModel, p: Profile) {
             KeyValue("রুম / সিট", "${p.roomNo ?: "—"} / ${p.seatNo ?: "—"}")
             KeyValue("ম্যানেজার", if (p.isCurrentManager) "হ্যাঁ" else "না")
         }
-        KeyValue("যোগদান", p.joinDate)
+        KeyValue("যোগদান", Dates.bnDate(p.joinDate))
     }
 }
 
@@ -354,7 +355,7 @@ fun ProfileScreen(vm: AppViewModel) {
                 KeyValue("রুম নং", p.roomNo ?: "—")
                 KeyValue("সিট নং", p.seatNo ?: "—")
             }
-            KeyValue("যোগদান", p.joinDate)
+            KeyValue("যোগদান", Dates.bnDate(p.joinDate))
             KeyValue("অবস্থা", if (p.isActive) "সক্রিয়" else "স্থগিত")
             KeyValue("রোল", roleLabel(p.role))
             if (p.role == Role.MEMBER) KeyValue("বর্তমান ম্যানেজার", if (p.isCurrentManager) "হ্যাঁ" else "না")

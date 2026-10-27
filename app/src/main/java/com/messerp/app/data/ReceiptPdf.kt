@@ -24,7 +24,7 @@ object ReceiptPdf {
         else -> "অন্যান্য"
     }
 
-    /** "2026-10-25 21:36" (Dhaka time) -> "২০২৬-১০-২৫, রাত ৯:৩৬" */
+    /** "2026-10-25 21:36" (Dhaka time) -> "২৫ অক্টোবর ২০২৬, রাত ৯:৩৬" */
     fun formatLocal(local: String): String {
         val parts = local.split(" ")
         if (parts.size != 2) return Money.bn(local)
@@ -38,7 +38,7 @@ object ReceiptPdf {
             else -> "রাত"
         }
         val h12 = if (h % 12 == 0) 12 else h % 12
-        return Money.bn(parts[0]) + ", " + period + " " + Money.bn(h12.toString() + ":" + hm.getOrElse(1) { "00" })
+        return Dates.bnDate(parts[0]) + ", " + period + " " + Money.bn(h12.toString() + ":" + hm.getOrElse(1) { "00" })
     }
 
     fun build(r: Receipt): ByteArray {
@@ -68,8 +68,8 @@ object ReceiptPdf {
         }
 
         row("রসিদ নম্বর", r.receiptNo)
-        row("পেমেন্টের তারিখ", Money.bn(r.paidDate))
-        row("রসিদ তৈরির সময়", formatLocal(r.createdLocal))
+        row("পেমেন্টের তারিখ", Dates.bnDate(r.paidDate))
+        row("পেমেন্ট গ্রহণের সময়", formatLocal(r.createdLocal))
         row("সদস্য", "${r.memberName} (${r.memberCode})")
         row("ফোন", Money.bn(r.memberPhone))
         row("পেমেন্টের মাধ্যম", methodLabel(r.method))
@@ -96,7 +96,7 @@ object ReceiptPdf {
 
         val foot = Paint().apply { isAntiAlias = true; color = Color.parseColor("#4B5B52"); textSize = 11f; textAlign = Paint.Align.CENTER }
         c.drawText("এটি সিস্টেম থেকে তৈরি ডিজিটাল রসিদ।", 210f, 566f, foot)
-        c.drawText("তৈরির সময়: " + formatLocal(r.createdLocal), 210f, 582f, foot)
+        c.drawText("রসিদ ডাউনলোডের সময়: " + formatLocal(Dates.nowDhakaLocal()), 210f, 582f, foot)
 
         doc.finishPage(page)
         val out = ByteArrayOutputStream()
