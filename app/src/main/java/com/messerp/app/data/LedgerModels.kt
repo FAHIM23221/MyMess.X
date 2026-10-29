@@ -56,7 +56,8 @@ data class Receipt(
     val memberPhone: String,
     val receivedBy: String?,
     val messName: String,
-    val reversalReason: String?
+    val reversalReason: String?,
+    val book: String = "MESS"
 )
 
 fun parseLedger(o: JSONObject): MemberLedger {
@@ -125,5 +126,6 @@ fun parseReceipt(o: JSONObject) = Receipt(
     memberPhone = o.getString("member_phone"),
     receivedBy = o.strOrNull("received_by"),
     messName = o.getString("mess_name"),
-    reversalReason = o.strOrNull("reversal_reason")
+    reversalReason = o.strOrNull("reversal_reason"),
+    book = o.optString("book", "MESS")
 )

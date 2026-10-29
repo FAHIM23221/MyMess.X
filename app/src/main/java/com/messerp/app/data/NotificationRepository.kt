@@ -10,7 +10,8 @@ data class AppNotification(
     val title: String,
     val body: String,
     val createdLocal: String,
-    val read: Boolean
+    val read: Boolean,
+    val dept: String = "GENERAL"
 )
 
 data class NoticeRow(
@@ -34,7 +35,8 @@ fun parseNotification(o: JSONObject) = AppNotification(
     title = o.getString("title"),
     body = o.getString("body"),
     createdLocal = o.getString("created_local"),
-    read = o.optBoolean("read", false)
+    read = o.optBoolean("read", false),
+    dept = o.optString("dept", "GENERAL")
 )
 
 class NotificationRepository(private val auth: AuthRepository) {
@@ -45,7 +47,7 @@ class NotificationRepository(private val auth: AuthRepository) {
     private fun fail(res: HttpResult): Nothing {
         val msg = runCatching { JSONObject(res.body).optString("message") }.getOrDefault("")
         val text = when {
-            msg.contains("forbidden") -> "এই কাজের অনুমতি আপনার নেই।"
+            msg.contains("forbidden") -> "এই ধরনের নোটিশ পাঠানোর অনুমতি আপনার নেই।"
             msg.contains("invalid_title") -> "শিরোনাম ১ থেকে ১২০ অক্ষরের হতে হবে।"
             msg.contains("invalid_body") -> "বিবরণ ১ থেকে ১০০০ অক্ষরের হতে হবে।"
             msg.contains("invalid_value") -> "মান সঠিক নয়। হেডলাইন চালু করতে লেখা থাকতে হবে (সর্বোচ্চ ২০০ অক্ষর)।"
@@ -98,11 +100,11 @@ class NotificationRepository(private val auth: AuthRepository) {
     /** Returns (noticeId, recipientCount). */
     suspend fun createNotice(
         title: String, body: String, level: String, audience: String,
-        type: String, popup: Boolean, requestId: String
+        type: String, popup: Boolean, department: String, requestId: String
     ): Pair<String, Int> {
         val json = JSONObject().put("p_title", title).put("p_body", body).put("p_level", level)
             .put("p_audience", audience).put("p_request_id", requestId)
-            .put("p_type", type).put("p_popup", popup).toString()
+            .put("p_type", type).put("p_popup", popup).put("p_department", department).toString()
         val res = call("/rest/v1/rpc/create_notice", json)
         if (res.code !in 200..299) fail(res)
         val o = JSONObject(res.body)

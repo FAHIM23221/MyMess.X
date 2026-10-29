@@ -16,6 +16,9 @@ import androidx.lifecycle.viewModelScope
 import com.messerp.app.config.AppConfig
 import com.messerp.app.data.AdminRepository
 import com.messerp.app.data.AppNotification
+import com.messerp.app.data.ManagerRepository
+import com.messerp.app.data.ManagerRole
+import com.messerp.app.data.ManagerRow
 import com.messerp.app.data.NoticeRow
 import com.messerp.app.data.NotificationRepository
 import com.messerp.app.data.Notifier
@@ -62,6 +65,7 @@ sealed interface Screen {
     data object Bills : Screen
     data object Finance : Screen
     data object Notifications : Screen
+    data object Managers : Screen
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -72,6 +76,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val avatars = AvatarRepository(auth)
     private val notifs = NotificationRepository(auth)
     private val pushRepo = PushRepository(auth)
+    private val mgrRepo = ManagerRepository(auth)
 
     var screen by mutableStateOf<Screen>(Screen.Splash)
         private set
@@ -125,6 +130,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val unreadCount: Int get() = notifications.count { !it.read }
     private var pollJob: Job? = null
     private var avatarErrorShown = false
+    var managerRoles by mutableStateOf<List<ManagerRole>>(emptyList())
+        private set
+    var managerRows by mutableStateOf<List<ManagerRow>>(emptyList())
+        private set
+    var activeBook by mutableStateOf("MESS")
+        private set
+    var myUtilLedger by mutableStateOf<MemberLedger?>(null)
+        private set
+    val isMealMgr: Boolean get() = managerRoles.any { it.type == "MEAL" }
+    val isBillMgr: Boolean get() = managerRoles.any { it.type == "BILL" }
+    val canGeneralNotice: Boolean get() = managerRoles.any { it.canGeneralNotice }
+    val canMeetingNotice: Boolean get() = managerRoles.any { it.canMeetingNotice }
+    val canPublish: Boolean get() = (profile?.let { it.role != Role.MEMBER } == true) || managerRoles.isNotEmpty()
     var popupQueue by mutableStateOf<List<AppNotification>>(emptyList())
         private set
     var headlineEnabled by mutableStateOf(false)
@@ -199,12 +217,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         screen = Screen.Home
         startNotifications()
         try {
+            managerRoles = mgrRepo.myRoles()
+        } catch (e: Exception) {
+            // Manager tools stay hidden until the next refresh.
+        }
+        try {
             refreshMeal()
         } catch (e: Exception) {
             error("মিলের তথ্য আনা যায়নি।")
         }
         if (p.role == Role.MEMBER) try {
-            myLedger = ledgerRepo.ledger(null, null)
+            myLedger = ledgerRepo.ledger(null, null, "MESS")
+            myUtilLedger = ledgerRepo.ledger(null, null, "UTILITY")
         } catch (e: Exception) {
             // The balance card stays empty; the Bills screen shows the real error if it persists.
         }
@@ -472,36 +496,56 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             ledger = null
             return
         }
-        val l = ledgerRepo.ledger(ledgerMemberId, ledgerMonth.ifEmpty { null })
+        val l = ledgerRepo.ledger(ledgerMemberId, ledgerMonth.ifEmpty { null }, activeBook)
         ledger = l
         if (ledgerMonth.isEmpty()) ledgerMonth = l.monthStart
     }
 
     private suspend fun refreshMyLedger() {
         if (profile?.role != Role.MEMBER) return
-        myLedger = ledgerRepo.ledger(null, null)
+        myLedger = ledgerRepo.ledger(null, null, "MESS")
+        myUtilLedger = ledgerRepo.ledger(null, null, "UTILITY")
     }
 
     private suspend fun refreshFinance() {
-        dues = ledgerRepo.dues()
-        payments = ledgerRepo.listPayments()
+        dues = ledgerRepo.dues(activeBook)
+        payments = ledgerRepo.listPayments(activeBook)
         refreshLedger()
         refreshMyLedger()
-        if (members.isEmpty()) members = admin.listMembers()
+        if (members.isEmpty() && profile?.role != Role.MEMBER) members = admin.listMembers()
     }
 
-    fun openBills() {
+    fun openBills(book: String = "MESS") {
+        activeBook = book
+
         ledgerMemberId = null
         ledgerMonth = ""
         ledger = null
         go(Screen.Bills)
     }
 
-    fun openFinance() {
+    fun openFinance(book: String = "MESS") {
+        activeBook = book
+        dues = null
+        payments = emptyList()
         ledgerMemberId = null
         ledgerMonth = ""
         ledger = null
         go(Screen.Finance)
+    }
+
+    fun openManagers() {
+        go(Screen.Managers)
+    }
+
+    fun switchBook(book: String) {
+        activeBook = book
+        ledgerMemberId = null
+        ledgerMonth = ""
+        ledger = null
+        dues = null
+        payments = emptyList()
+        if (screen == Screen.Finance) loadFinance() else loadLedger()
     }
 
     fun loadLedger() {
@@ -531,9 +575,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (memberId.isEmpty()) return error("কার পেমেন্ট তা বাছুন।")
         val minor = Money.parseTakaToMinor(amountText)
             ?: return error("সঠিক পরিমাণ দিন (১ থেকে ১০,০০,০০০ টাকা, সর্বোচ্চ ২ দশমিক ঘর)।")
-        val reqId = payIdem.idFor("$memberId|$minor|$method|$date|${txnRef.trim()}|${memo.trim()}")
+        val reqId = payIdem.idFor("$memberId|$minor|$method|$date|${txnRef.trim()}|${memo.trim()}|$activeBook")
         launchSafe {
-            val result = ledgerRepo.recordPayment(memberId, minor, method, date, memo, txnRef, reqId)
+            val result = ledgerRepo.recordPayment(memberId, minor, method, date, memo, txnRef, reqId, activeBook)
             payIdem.clear()
             lastPaymentId = result.first
             lastReceiptNo = result.second
@@ -556,9 +600,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val minor = Money.parseTakaToMinor(amountText)
             ?: return error("সঠিক পরিমাণ দিন (১ থেকে ১০,০০,০০০ টাকা, সর্বোচ্চ ২ দশমিক ঘর)।")
         val month = Dates.monthStart(monthDate)
-        val reqId = chargeIdem.idFor("$memberId|$month|$category|$minor|${desc.trim()}")
+        val reqId = chargeIdem.idFor("$memberId|$month|$category|$minor|${desc.trim()}|$activeBook")
         launchSafe {
-            ledgerRepo.addCharge(memberId, month, category, minor, desc, reqId)
+            ledgerRepo.addCharge(memberId, month, category, minor, desc, reqId, activeBook)
             chargeIdem.clear()
             refreshFinance()
             formVersion++
@@ -570,9 +614,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val minor = Money.parseTakaToMinor(amountText)
             ?: return error("সঠিক মোট পরিমাণ দিন (১ থেকে ১০,০০,০০০ টাকা, সর্বোচ্চ ২ দশমিক ঘর)।")
         val month = Dates.monthStart(monthDate)
-        val reqId = splitIdem.idFor("$month|$category|$minor|${desc.trim()}")
+        val reqId = splitIdem.idFor("$month|$category|$minor|${desc.trim()}|$activeBook")
         launchSafe {
-            val n = ledgerRepo.splitCharge(month, category, minor, desc, reqId)
+            val n = ledgerRepo.splitCharge(month, category, minor, desc, reqId, activeBook)
             splitIdem.clear()
             refreshFinance()
             formVersion++
@@ -697,6 +741,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     notifications = notifs.list(50)
                     popupQueue = notifs.popups()
+                    managerRoles = mgrRepo.myRoles()
                     val h = notifs.headline()
                     headlineEnabled = h.first
                     headlineText = h.second
@@ -717,12 +762,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         popupQueue = emptyList()
         headlineEnabled = false
         headlineText = ""
+        managerRoles = emptyList()
+        managerRows = emptyList()
+        myUtilLedger = null
+        activeBook = "MESS"
     }
 
     fun loadNotifications() {
         launchSafe {
             notifications = notifs.list(50)
-            if (profile?.role != Role.MEMBER) noticeHistory = notifs.noticeHistory()
+            if (canPublish) noticeHistory = notifs.noticeHistory()
         }
     }
 
@@ -745,12 +794,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun createNotice(title: String, body: String, level: String, audience: String, type: String, popup: Boolean) {
+    fun createNotice(title: String, body: String, level: String, audience: String, type: String, popup: Boolean, department: String) {
         val t = title.trim().ifEmpty { if (type == "EMERGENCY_MEETING") "জরুরি মিটিং" else "" }
         if (t.isEmpty() || body.isBlank()) return error("শিরোনাম ও বিবরণ লিখুন।")
-        val reqId = noticeIdem.idFor("$t|${body.trim()}|$level|$audience|$type|$popup")
+        val reqId = noticeIdem.idFor("$t|${body.trim()}|$level|$audience|$type|$popup|$department")
         launchSafe {
-            val result = notifs.createNotice(t, body.trim(), level, audience, type, popup, reqId)
+            val result = notifs.createNotice(t, body.trim(), level, audience, type, popup, department, reqId)
             noticeIdem.clear()
             notifications = notifs.list(50)
             noticeHistory = notifs.noticeHistory()
@@ -791,6 +840,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             headlineText = t
             headlineEnabled = enabled
             note(if (enabled) "স্ক্রলিং হেডলাইন চালু হয়েছে।" else "স্ক্রলিং হেডলাইন বন্ধ হয়েছে।")
+        }
+    }
+
+    fun sendDueReminders() {
+        val book = activeBook
+        launchSafe {
+            val n = ledgerRepo.sendDueReminders(book)
+            note(if (n > 0) "বকেয়ার স্মরণ গেছে " + Money.bn(n.toLong()) + " জন সদস্যের কাছে।" else "বকেয়া আছে এমন কোনো সদস্য নেই।")
+        }
+    }
+
+    fun loadManagers() {
+        launchSafe {
+            managerRows = mgrRepo.list()
+            if (members.isEmpty()) members = admin.listMembers()
+        }
+    }
+
+    fun saveManager(userId: String, type: String, active: Boolean, general: Boolean, meeting: Boolean, reason: String) {
+        launchSafe {
+            mgrRepo.set(userId, type, active, general, meeting, reason)
+            managerRows = mgrRepo.list()
+            note(if (active) "ম্যানেজারের দায়িত্ব ও অনুমতি সংরক্ষিত হয়েছে।" else "ম্যানেজারের দায়িত্ব বাতিল হয়েছে।")
         }
     }
 }

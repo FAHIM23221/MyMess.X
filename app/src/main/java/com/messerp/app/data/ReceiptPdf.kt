@@ -52,7 +52,7 @@ object ReceiptPdf {
         val head = Paint().apply { isAntiAlias = true; color = Color.WHITE; textSize = 22f; isFakeBoldText = true }
         c.drawText(r.messName, 28f, 38f, head)
         val sub = Paint().apply { isAntiAlias = true; color = Color.WHITE; textSize = 13f }
-        c.drawText("পেমেন্ট রসিদ", 28f, 62f, sub)
+        c.drawText(if (r.book == "UTILITY") "বিদ্যুৎ ও রাঁধুনি বিল: পেমেন্ট রসিদ" else "পেমেন্ট রসিদ", 28f, 62f, sub)
 
         val label = Paint().apply { isAntiAlias = true; color = Color.parseColor("#4B5B52"); textSize = 12f }
         val value = Paint().apply { isAntiAlias = true; color = Color.BLACK; textSize = 14f; isFakeBoldText = true; textAlign = Paint.Align.RIGHT }

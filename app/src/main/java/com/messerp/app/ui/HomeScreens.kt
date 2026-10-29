@@ -143,6 +143,14 @@ fun MemberContent(vm: AppViewModel, p: Profile) {
         StatCard(bal.first, bal.second, Modifier.weight(1f), bal.third)
         StatCard("প্রতি মিলের রেট", Money.formatRate(vm.summary?.rateMinor), Modifier.weight(1f), "বাজার খরচ ÷ মোট মিল")
     }
+    val ul = vm.myUtilLedger
+    val ub = when {
+        ul == null -> Triple("বিদ্যুৎ ও রাঁধুনি বিল", "—", "লোড হচ্ছে")
+        ul.dueMinor > 0 -> Triple("বিদ্যুৎ ও রাঁধুনি বাকি", Money.format(ul.dueMinor), "পরিশোধ করুন")
+        ul.advanceMinor > 0 -> Triple("বিদ্যুৎ ও রাঁধুনি অগ্রিম", Money.format(ul.advanceMinor), "পরের বিলে সমন্বয় হবে")
+        else -> Triple("বিদ্যুৎ ও রাঁধুনি বিল", "৳ " + Money.bn("0.00"), "কোনো বাকি নেই")
+    }
+    StatCard(ub.first, ub.second, Modifier.fillMaxWidth(), ub.third)
     val st = vm.mealStatus
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (st != null) {
@@ -160,9 +168,21 @@ fun MemberContent(vm: AppViewModel, p: Profile) {
             Tile("চাল", false, soon),
             Tile("স্বচ্ছতা", false, soon),
             Tile("পেমেন্ট ও রসিদ", true) { vm.openBills() },
+            Tile("বিদ্যুৎ ও রাঁধুনি বিল", true) { vm.openBills("UTILITY") },
             Tile("ডিউটি", false, soon)
         )
     )
+    if (vm.isMealMgr || vm.isBillMgr || vm.canPublish) {
+        SectionTitle("ম্যানেজার প্যানেল")
+        val mt = mutableListOf<Tile>()
+        if (vm.isMealMgr) {
+            mt.add(Tile("বাজার খরচ ও গেস্ট মিল", true) { vm.go(Screen.Expenses) })
+            mt.add(Tile("সবার মিল ও রেট", true) { vm.go(Screen.Meal) })
+        }
+        if (vm.isBillMgr) mt.add(Tile("বিদ্যুৎ ও রাঁধুনি বিল ম্যানেজ", true) { vm.openFinance("UTILITY") })
+        if (vm.canPublish) mt.add(Tile("নোটিশ ও নোটিফিকেশন", true) { vm.go(Screen.Notifications) })
+        TileGrid(mt)
+    }
     val latest = vm.notifications.firstOrNull { it.kind == "NOTICE" }
     AppCard(modifier = Modifier.clickable { vm.go(Screen.Notifications) }) {
         Text("সর্বশেষ নোটিশ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -171,6 +191,20 @@ fun MemberContent(vm: AppViewModel, p: Profile) {
 }
 
 private class Pending(val target: Profile, val role: Role?, val status: String?, val label: String)
+
+@Composable
+fun ReadyRow(title: String, onClick: () -> Unit) {
+    AppCard(modifier = Modifier.clickable(onClick = onClick)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text("›", fontSize = 18.sp, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
 
 @Composable
 fun ControlRow(title: String, onClick: () -> Unit) {
@@ -207,7 +241,8 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
         tiles.add(Tile("নতুন অ্যাডমিনের কোড", !vm.busy) { vm.createInvite(Role.ADMIN) })
         tiles.add(Tile("অভিভাবক ছাড়ের সদস্য কোড", !vm.busy) { vm.createInvite(Role.MEMBER, true) })
     }
-    tiles.add(Tile("পেমেন্ট ও চার্জ", true) { vm.go(Screen.Finance) })
+    tiles.add(Tile("পেমেন্ট ও চার্জ", true) { vm.openFinance("MESS") })
+    tiles.add(Tile("বিদ্যুৎ ও রাঁধুনি বিল", true) { vm.openFinance("UTILITY") })
     tiles.add(Tile("বাজার খরচ ও গেস্ট মিল", true) { vm.go(Screen.Expenses) })
     tiles.add(Tile("মিল ও রেট", true) { vm.go(Screen.Meal) })
     tiles.add(Tile("নোটিশ দিন", true) { vm.go(Screen.Notifications) })
@@ -245,7 +280,7 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
             }
         }
         SectionTitle("নিয়ন্ত্রণ")
-        ControlRow("অ্যাডমিনের অনুমতি", soon)
+        ReadyRow("ম্যানেজার ও নোটিশের অনুমতি") { vm.openManagers() }
         ControlRow("বকেয়ার সীমা ও মিল নীতি", soon)
         ControlRow("ম্যানেজার রোটেশন", soon)
         ControlRow("অডিট লগ", soon)

@@ -43,9 +43,15 @@ private fun audienceLabel(a: String) = when (a) {
     else -> "সব সদস্য"
 }
 
+private fun deptLabel(d: String) = when (d) {
+    "MEAL" -> "মিল"
+    "BILL" -> "বিদ্যুৎ ও রাঁধুনি"
+    else -> "সাধারণ"
+}
+
 private const val MEETING = "EMERGENCY_MEETING"
 
-/** Shown on the Home page when the app is opened and an admin marked a notice as a pop-up. */
+/** Shown on the Home page when the app is opened and a notice was marked as a pop-up. */
 @Composable
 fun NoticePopup(n: AppNotification, onDismiss: () -> Unit) {
     val meeting = n.kind == "MEETING"
@@ -71,7 +77,16 @@ fun NotificationsScreen(vm: AppViewModel) {
     val p = vm.profile ?: return
     val isAdmin = p.role != Role.MEMBER
     val context = LocalContext.current
-    var type by rememberSaveable(vm.formVersion) { mutableStateOf("NORMAL") }
+    val deptOptions = buildList {
+        if (isAdmin || vm.canGeneralNotice) add("GENERAL")
+        if (isAdmin || vm.isMealMgr) add("MEAL")
+        if (isAdmin || vm.isBillMgr) add("BILL")
+    }
+    val meetingAllowed = isAdmin || vm.canMeetingNotice
+    val normalAllowed = deptOptions.isNotEmpty()
+
+    var type by rememberSaveable(vm.formVersion) { mutableStateOf(if (normalAllowed) "NORMAL" else MEETING) }
+    var dept by rememberSaveable(vm.formVersion) { mutableStateOf(deptOptions.firstOrNull() ?: "GENERAL") }
     var title by rememberSaveable(vm.formVersion) { mutableStateOf("") }
     var body by rememberSaveable(vm.formVersion) { mutableStateOf("") }
     var meetTime by rememberSaveable(vm.formVersion) { mutableStateOf("") }
@@ -118,6 +133,7 @@ fun NotificationsScreen(vm: AppViewModel) {
             AppCard(modifier = Modifier.clickable { if (!n.read) vm.markRead(n.id) }) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     StatusChip(if (n.kind == "MEETING") "জরুরি মিটিং" else levelLabel(n.level), positive = !n.read)
+                    if (n.dept != "GENERAL") StatusChip(deptLabel(n.dept))
                     Text(ReceiptPdf.formatLocal(n.createdLocal), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text(Money.bn(n.title), fontWeight = if (n.read) FontWeight.Normal else FontWeight.Bold)
@@ -147,13 +163,22 @@ fun NotificationsScreen(vm: AppViewModel) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
 
+        if (vm.canPublish && (normalAllowed || meetingAllowed)) {
             SectionTitle("নতুন নোটিফিকেশন পাঠান")
             AppCard {
+                if (!isAdmin) {
+                    Text(
+                        "আপনি ম্যানেজার হিসেবে শুধু সদস্যদের কাছে নোটিশ পাঠাতে পারবেন, এবং শুধু অনুমতি পাওয়া ধরনের।",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text("ধরন", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ChoiceChip("সাধারণ নোটিফিকেশন", type == "NORMAL") { type = "NORMAL" }
-                    ChoiceChip("জরুরি মিটিং", type == MEETING) { type = MEETING }
+                    if (normalAllowed) ChoiceChip("সাধারণ নোটিফিকেশন", type == "NORMAL") { type = "NORMAL" }
+                    if (meetingAllowed) ChoiceChip("জরুরি মিটিং", type == MEETING) { type = MEETING }
                 }
                 Field(if (type == MEETING) "শিরোনাম (ফাঁকা রাখলে \"জরুরি মিটিং\")" else "শিরোনাম", title, { title = it })
                 if (type == MEETING) {
@@ -166,19 +191,32 @@ fun NotificationsScreen(vm: AppViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
+                    if (deptOptions.size > 1) {
+                        Text("বিভাগ", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            deptOptions.forEach { d -> ChoiceChip(deptLabel(d), dept == d) { dept = d } }
+                        }
+                    } else {
+                        Text("বিভাগ: " + deptLabel(dept), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
                     Field("বিবরণ", body, { body = it }, singleLine = false)
                     Text("গুরুত্ব", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("NORMAL", "IMPORTANT", "EMERGENCY").forEach { l -> ChoiceChip(levelLabel(l), level == l) { level = l } }
+                        val levels = if (isAdmin) listOf("NORMAL", "IMPORTANT", "EMERGENCY") else listOf("NORMAL", "IMPORTANT")
+                        levels.forEach { l -> ChoiceChip(levelLabel(l), level == l) { level = l } }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = popup, onCheckedChange = { popup = it })
                         Text("অ্যাপ খুললে Home পেজে পপ-আপ দেখান")
                     }
                 }
-                Text("কারা পাবে", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("MEMBERS", "ADMINS", "EVERYONE").forEach { a -> ChoiceChip(audienceLabel(a), audience == a) { audience = a } }
+                if (isAdmin) {
+                    Text("কারা পাবে", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("MEMBERS", "ADMINS", "EVERYONE").forEach { a -> ChoiceChip(audienceLabel(a), audience == a) { audience = a } }
+                    }
+                } else {
+                    Text("প্রাপক: সব সদস্য", fontSize = 13.sp)
                 }
                 PrimaryButton(if (type == MEETING) "জরুরি মিটিং নোটিফিকেশন পাঠান" else "নোটিফিকেশন পাঠান", !vm.busy) {
                     val finalBody = if (type == MEETING) {
@@ -190,11 +228,17 @@ fun NotificationsScreen(vm: AppViewModel) {
                     } else {
                         body
                     }
-                    vm.createNotice(title, finalBody, if (type == MEETING) "EMERGENCY" else level, audience, type, popup)
+                    vm.createNotice(
+                        title, finalBody,
+                        if (type == MEETING) "EMERGENCY" else level,
+                        if (isAdmin) audience else "MEMBERS",
+                        type, popup,
+                        if (type == MEETING) "GENERAL" else dept
+                    )
                 }
             }
 
-            SectionTitle("পাঠানো নোটিশের ইতিহাস")
+            SectionTitle(if (isAdmin) "পাঠানো নোটিশের ইতিহাস" else "আমার পাঠানো নোটিশ")
             if (vm.noticeHistory.isEmpty()) Text("এখনো কোনো নোটিশ পাঠানো হয়নি।", color = MaterialTheme.colorScheme.onSurfaceVariant)
             vm.noticeHistory.forEach { h ->
                 AppCard {

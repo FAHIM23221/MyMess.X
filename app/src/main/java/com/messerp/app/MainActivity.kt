@@ -23,6 +23,7 @@ import com.messerp.app.ui.ExpensesScreen
 import com.messerp.app.ui.FinanceScreen
 import com.messerp.app.ui.HomeScreen
 import com.messerp.app.ui.LoginScreen
+import com.messerp.app.ui.ManagersScreen
 import com.messerp.app.ui.MealScreen
 import com.messerp.app.ui.MessTheme
 import com.messerp.app.ui.ProfileScreen
@@ -66,6 +67,10 @@ class MainActivity : ComponentActivity() {
                         Screen.Notifications -> {
                             BackHandler { vm.go(Screen.Home) }
                             NotificationsScreen(vm)
+                        }
+                        Screen.Managers -> {
+                            BackHandler { vm.go(Screen.Home) }
+                            ManagersScreen(vm)
                         }
                         Screen.Bills -> {
                             BackHandler { vm.go(Screen.Home) }

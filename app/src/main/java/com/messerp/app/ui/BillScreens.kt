@@ -29,7 +29,8 @@ import com.messerp.app.data.Role
 private fun catLabel(c: String) = when (c) {
     "SEAT_RENT" -> "সিট ভাড়া"
     "MEAL" -> "মিল"
-    "ELECTRICITY" -> "বিদ্যুৎ"
+    "ELECTRICITY" -> "বিদ্যুৎ বিল"
+    "CHEF" -> "রাঁধুনি বিল"
     "WIFI" -> "ওয়াই-ফাই"
     "GAS" -> "গ্যাস"
     "WATER" -> "পানি"
@@ -134,10 +135,21 @@ fun LedgerView(
 }
 
 @Composable
+fun BookSwitch(vm: AppViewModel) {
+    val utility = vm.activeBook == "UTILITY"
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ChoiceChip("মেস খাতা", !utility) { if (utility) vm.switchBook("MESS") }
+        ChoiceChip("বিদ্যুৎ ও রাঁধুনি বিল", utility) { if (!utility) vm.switchBook("UTILITY") }
+    }
+}
+
+@Composable
 fun BillsScreen(vm: AppViewModel) {
     LaunchedEffect(Unit) { vm.loadLedger() }
-    AppScaffold(vm, 0, "আমার ব্যালেন্স", "বিল ও পেমেন্ট") {
+    val utility = vm.activeBook == "UTILITY"
+    AppScaffold(vm, 0, if (utility) "বিদ্যুৎ ও রাঁধুনি বিল" else "আমার ব্যালেন্স", "বিল ও পেমেন্ট") {
         MessageText(vm)
+        BookSwitch(vm)
         MonthBar(vm)
         val lg = vm.ledger
         if (lg == null) Text("লোড হচ্ছে...") else LedgerView(vm, lg, false, {}, {})
@@ -147,22 +159,28 @@ fun BillsScreen(vm: AppViewModel) {
 @Composable
 fun FinanceScreen(vm: AppViewModel) {
     val p = vm.profile ?: return
-    if (p.role == Role.MEMBER) return
+    val book = vm.activeBook
+    val utility = book == "UTILITY"
+    val isAdmin = p.role != Role.MEMBER
+    if (!isAdmin && !(utility && vm.isBillMgr)) return
     val isMain = p.role == Role.MAIN_ADMIN
     val today = vm.mealStatus?.today ?: Dates.todayDhaka()
+    val cats = if (utility) listOf("ELECTRICITY", "CHEF") else listOf("SEAT_RENT", "WIFI", "GAS", "WATER", "FINE", "OTHER")
+    val people = vm.dues?.members ?: emptyList()
+    val others = people.filter { it.id != p.id }
 
-    var payMember by rememberSaveable(vm.formVersion) { mutableStateOf("") }
-    var payMethod by rememberSaveable(vm.formVersion) { mutableStateOf("CASH") }
-    var payAmount by rememberSaveable(vm.formVersion) { mutableStateOf("") }
-    var payDate by rememberSaveable(vm.formVersion) { mutableStateOf(today) }
-    var payTxn by rememberSaveable(vm.formVersion) { mutableStateOf("") }
-    var payMemo by rememberSaveable(vm.formVersion) { mutableStateOf("") }
+    var payMember by rememberSaveable(vm.formVersion, book) { mutableStateOf("") }
+    var payMethod by rememberSaveable(vm.formVersion, book) { mutableStateOf("CASH") }
+    var payAmount by rememberSaveable(vm.formVersion, book) { mutableStateOf("") }
+    var payDate by rememberSaveable(vm.formVersion, book) { mutableStateOf(today) }
+    var payTxn by rememberSaveable(vm.formVersion, book) { mutableStateOf("") }
+    var payMemo by rememberSaveable(vm.formVersion, book) { mutableStateOf("") }
 
-    var chMember by rememberSaveable(vm.formVersion) { mutableStateOf("") }
-    var chCategory by rememberSaveable(vm.formVersion) { mutableStateOf("SEAT_RENT") }
-    var chAmount by rememberSaveable(vm.formVersion) { mutableStateOf("") }
-    var chMonth by rememberSaveable(vm.formVersion) { mutableStateOf(today) }
-    var chDesc by rememberSaveable(vm.formVersion) { mutableStateOf("") }
+    var chMember by rememberSaveable(vm.formVersion, book) { mutableStateOf("") }
+    var chCategory by rememberSaveable(vm.formVersion, book) { mutableStateOf(cats.first()) }
+    var chAmount by rememberSaveable(vm.formVersion, book) { mutableStateOf("") }
+    var chMonth by rememberSaveable(vm.formVersion, book) { mutableStateOf(today) }
+    var chDesc by rememberSaveable(vm.formVersion, book) { mutableStateOf("") }
 
     var mealMonth by rememberSaveable(vm.formVersion) { mutableStateOf(Dates.addMonths(Dates.monthStart(today), -1)) }
     var mealForce by rememberSaveable(vm.formVersion) { mutableStateOf(false) }
@@ -171,10 +189,22 @@ fun FinanceScreen(vm: AppViewModel) {
     var revPayId by rememberSaveable { mutableStateOf<String?>(null) }
     var revChargeId by rememberSaveable { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) { vm.loadFinance() }
+    LaunchedEffect(book) { vm.loadFinance() }
 
-    AppScaffold(vm, 0, "পেমেন্ট ও চার্জ", "অ্যাডমিন") {
+    AppScaffold(
+        vm, 0,
+        if (utility) "বিদ্যুৎ ও রাঁধুনি বিল" else "পেমেন্ট ও চার্জ",
+        if (isAdmin) "অ্যাডমিন" else "বিল ম্যানেজার"
+    ) {
         MessageText(vm)
+        if (isAdmin) BookSwitch(vm)
+        if (utility) {
+            Text(
+                "এই খাতা মেসের মূল খাতা থেকে আলাদা। নিজের নামে চার্জ বা পেমেন্ট এন্ট্রি করা যায় না; সেটা অন্য অ্যাডমিন করবেন।",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
         vm.dues?.let { d ->
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -196,9 +226,9 @@ fun FinanceScreen(vm: AppViewModel) {
         SectionTitle("পেমেন্ট লিখুন")
         AppCard {
             Text("সদস্য", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            vm.members.chunked(2).forEach { row ->
+            others.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 2.dp)) {
-                    row.forEach { m -> ChoiceChip(m.fullName, payMember == m.id) { payMember = m.id } }
+                    row.forEach { m -> ChoiceChip(m.name, payMember == m.id) { payMember = m.id } }
                 }
             }
             Text("মাধ্যম", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
@@ -216,60 +246,68 @@ fun FinanceScreen(vm: AppViewModel) {
             }
         }
 
-        SectionTitle("চার্জ যোগ করুন")
+        SectionTitle(if (utility) "বিল যোগ করুন" else "চার্জ যোগ করুন")
         AppCard {
             Text("বিভাগ", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            CHARGE_CATEGORIES.chunked(3).forEach { row ->
+            cats.chunked(3).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 2.dp)) {
                     row.forEach { c -> ChoiceChip(catLabel(c), chCategory == c) { chCategory = c } }
                 }
             }
             Field("পরিমাণ (টাকা)", chAmount, { chAmount = it }, KeyboardType.Decimal, hint = "0.00")
-            DateField("কোন মাসের চার্জ (মাসের যেকোনো তারিখ)", chMonth) { chMonth = it }
+            DateField("কোন মাসের (মাসের যেকোনো তারিখ)", chMonth) { chMonth = it }
             Field("বিবরণ (ঐচ্ছিক)", chDesc, { chDesc = it })
             Text("এক সদস্যকে দিতে নিচের তালিকা থেকে সদস্য বাছুন:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            vm.members.chunked(2).forEach { row ->
+            others.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 2.dp)) {
-                    row.forEach { m -> ChoiceChip(m.fullName, chMember == m.id) { chMember = m.id } }
+                    row.forEach { m -> ChoiceChip(m.name, chMember == m.id) { chMember = m.id } }
                 }
             }
-            PrimaryButton("এই সদস্যকে চার্জ", !vm.busy) { vm.addCharge(chMember, chMonth, chCategory, chAmount, chDesc) }
+            PrimaryButton("এই সদস্যকে যোগ করুন", !vm.busy) { vm.addCharge(chMember, chMonth, chCategory, chAmount, chDesc) }
             SecondaryButton("মোট পরিমাণ সব সক্রিয় সদস্যে সমান ভাগ") { vm.splitCharge(chMonth, chCategory, chAmount, chDesc) }
         }
 
-        SectionTitle("মিল চার্জ বসান")
-        AppCard {
-            Text(
-                "Phase 2-র মিল রেট অনুযায়ী প্রতিটি সদস্যের মিলের খরচ খাতায় বসবে। মাস শেষ হলে একবারই বসানো যায়।",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            DateField("কোন মাস (মাসের যেকোনো তারিখ)", mealMonth) { mealMonth = it }
-            if (isMain) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = mealForce, onCheckedChange = { mealForce = it })
-                    Text("মাস শেষের আগেই বসান (মূল অ্যাডমিন)")
+        if (!utility) {
+            SectionTitle("মিল চার্জ বসান")
+            AppCard {
+                Text(
+                    "মিল রেট অনুযায়ী প্রতিটি সদস্যের মিলের খরচ খাতায় বসবে। মাস শেষ হলে একবারই বসানো যায়।",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                DateField("কোন মাস (মাসের যেকোনো তারিখ)", mealMonth) { mealMonth = it }
+                if (isMain) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = mealForce, onCheckedChange = { mealForce = it })
+                        Text("মাস শেষের আগেই বসান (মূল অ্যাডমিন)")
+                    }
+                    if (mealForce) Field("কারণ", mealReason, { mealReason = it })
                 }
-                if (mealForce) Field("কারণ", mealReason, { mealReason = it })
+                PrimaryButton("মিল চার্জ বসান", !vm.busy) { vm.postMeal(mealMonth, mealForce, mealReason) }
             }
-            PrimaryButton("মিল চার্জ বসান", !vm.busy) { vm.postMeal(mealMonth, mealForce, mealReason) }
         }
 
-        SectionTitle("সদস্যের খাতা")
-        vm.dues?.members?.chunked(1)?.forEach { row ->
-            row.forEach { b ->
-                AppCard {
-                    Text("${b.name} (${b.code})", fontWeight = FontWeight.Bold)
-                    Text(
-                        if (b.balanceMinor > 0) "বাকি ${Money.format(b.balanceMinor)}"
-                        else if (b.balanceMinor < 0) "অগ্রিম ${Money.format(-b.balanceMinor)}"
-                        else "কোনো বাকি নেই"
-                    )
-                    OutlinedButton(onClick = { vm.selectLedgerMember(b.id) }, enabled = !vm.busy) { Text("খাতা দেখুন") }
-                }
+        SectionTitle("বকেয়া স্মরণ")
+        AppCard {
+            Text("যাদের বাকি আছে তাদের সবাইকে বিজ্ঞপ্তি পাঠানো হবে। ১২ ঘণ্টায় একবার পাঠানো যায়।", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = { vm.sendDueReminders() }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) {
+                Text("বকেয়া স্মরণ পাঠান")
+            }
+        }
+
+        SectionTitle(if (utility) "সদস্যের বিদ্যুৎ ও রাঁধুনি খাতা" else "সদস্যের খাতা")
+        people.forEach { b ->
+            AppCard {
+                Text("${b.name} (${b.code})", fontWeight = FontWeight.Bold)
+                Text(
+                    if (b.balanceMinor > 0) "বাকি ${Money.format(b.balanceMinor)}"
+                    else if (b.balanceMinor < 0) "অগ্রিম ${Money.format(-b.balanceMinor)}"
+                    else "কোনো বাকি নেই"
+                )
+                OutlinedButton(onClick = { vm.selectLedgerMember(b.id) }, enabled = !vm.busy) { Text("খাতা দেখুন") }
             }
         }
         if (vm.ledgerMemberId != null) {
-            val who = vm.members.firstOrNull { it.id == vm.ledgerMemberId }?.fullName ?: "সদস্য"
+            val who = people.firstOrNull { it.id == vm.ledgerMemberId }?.name ?: "সদস্য"
             SectionTitle("$who-এর খাতা")
             MonthBar(vm)
             val lg = vm.ledger
@@ -279,7 +317,7 @@ fun FinanceScreen(vm: AppViewModel) {
         SectionTitle("সাম্প্রতিক পেমেন্ট")
         if (vm.payments.isEmpty()) Text("এখনো কোনো পেমেন্ট নেই।", color = MaterialTheme.colorScheme.onSurfaceVariant)
         vm.payments.forEach { pm ->
-            val who = vm.members.firstOrNull { it.id == pm.memberId }?.fullName ?: "সদস্য"
+            val who = people.firstOrNull { it.id == pm.memberId }?.name ?: "সদস্য"
             AppCard {
                 Text("$who: ${Money.format(pm.amountMinor)}", fontWeight = FontWeight.Bold)
                 Text("${pm.receiptNo} · ${ReceiptPdf.methodLabel(pm.method)} · ${Dates.bnDate(pm.paidDate)}", fontSize = 12.sp)

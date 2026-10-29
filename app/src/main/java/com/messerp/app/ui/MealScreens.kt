@@ -135,7 +135,8 @@ fun MealScreen(vm: AppViewModel) {
                     KeyValue("মিলের খরচ", Money.format(mine.costMinor))
                 }
             }
-        } else if (summary != null) {
+        }
+        if ((isAdmin || vm.isMealMgr) && summary != null) {
             SectionTitle("সদস্যদের মিল ও খরচ")
             summary.members.forEach { m ->
                 AppCard {
@@ -201,7 +202,7 @@ fun MealScreen(vm: AppViewModel) {
 @Composable
 fun ExpensesScreen(vm: AppViewModel) {
     val p = vm.profile ?: return
-    if (p.role == Role.MEMBER) return
+    if (p.role == Role.MEMBER && !vm.isMealMgr) return
     val today = vm.mealStatus?.today ?: Dates.todayDhaka()
     var category by rememberSaveable(vm.formVersion) { mutableStateOf("MARKET") }
     var amount by rememberSaveable(vm.formVersion) { mutableStateOf("") }
@@ -269,9 +270,9 @@ fun ExpensesScreen(vm: AppViewModel) {
         SectionTitle("গেস্ট মিল যোগ")
         AppCard {
             Text("কার গেস্ট", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            vm.members.chunked(2).forEach { row ->
+            (vm.summary?.members ?: emptyList()).chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 2.dp)) {
-                    row.forEach { m -> ChoiceChip(m.fullName, guestMember == m.id) { guestMember = m.id } }
+                    row.forEach { m -> ChoiceChip(m.name, guestMember == m.id) { guestMember = m.id } }
                 }
             }
             Text("বেলা", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
@@ -286,7 +287,7 @@ fun ExpensesScreen(vm: AppViewModel) {
         SectionTitle("এ মাসের গেস্ট মিল")
         if (vm.guestMeals.isEmpty()) Text("এখনো কোনো গেস্ট মিল নেই।", color = MaterialTheme.colorScheme.onSurfaceVariant)
         vm.guestMeals.forEach { g ->
-            val host = vm.members.firstOrNull { it.id == g.memberId }?.fullName ?: "সদস্য"
+            val host = vm.summary?.members?.firstOrNull { it.id == g.memberId }?.name ?: "সদস্য"
             AppCard {
                 Text("$host: ${Money.bn(g.count.toLong())} জন, ${slotLabel(g.slot)}", fontWeight = FontWeight.SemiBold)
                 Text(Dates.bnDate(g.date), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
