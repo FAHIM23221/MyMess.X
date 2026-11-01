@@ -186,6 +186,11 @@ fun FinanceScreen(vm: AppViewModel) {
     var mealForce by rememberSaveable(vm.formVersion) { mutableStateOf(false) }
     var mealReason by rememberSaveable(vm.formVersion) { mutableStateOf("") }
 
+    var exCat by rememberSaveable(vm.formVersion, book) { mutableStateOf("ELECTRICITY") }
+    var exAmount by rememberSaveable(vm.formVersion, book) { mutableStateOf("") }
+    var exDate by rememberSaveable(vm.formVersion, book) { mutableStateOf(today) }
+    var exDesc by rememberSaveable(vm.formVersion, book) { mutableStateOf("") }
+
     var revPayId by rememberSaveable { mutableStateOf<String?>(null) }
     var revChargeId by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -265,6 +270,23 @@ fun FinanceScreen(vm: AppViewModel) {
             }
             PrimaryButton("এই সদস্যকে যোগ করুন", !vm.busy) { vm.addCharge(chMember, chMonth, chCategory, chAmount, chDesc) }
             SecondaryButton("মোট পরিমাণ সব সক্রিয় সদস্যে সমান ভাগ") { vm.splitCharge(chMonth, chCategory, chAmount, chDesc) }
+        }
+
+        if (utility) {
+            SectionTitle("বিল পরিশোধ (খরচ) লিখুন")
+            AppCard {
+                Text(
+                    "আসল বিল (বিদ্যুৎ অফিস বা রাঁধুনিকে) পরিশোধ করলে এখানে লিখুন, যাতে সংগ্রহ করা টাকার সঙ্গে হিসাব মেলে। ভুল হলে বাতিল করে নতুন এন্ট্রি দিতে হবে।",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("ELECTRICITY", "CHEF").forEach { c -> ChoiceChip(catLabel(c), exCat == c) { exCat = c } }
+                }
+                Field("পরিমাণ (টাকা)", exAmount, { exAmount = it }, KeyboardType.Decimal, hint = "0.00")
+                DateField("পরিশোধের তারিখ", exDate) { exDate = it }
+                Field("বিবরণ", exDesc, { exDesc = it })
+                PrimaryButton("খরচ সংরক্ষণ", !vm.busy) { vm.addExpense(exDate, exCat, exAmount, exDesc) }
+            }
         }
 
         if (!utility) {

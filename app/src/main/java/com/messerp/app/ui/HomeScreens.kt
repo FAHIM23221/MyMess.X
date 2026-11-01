@@ -166,7 +166,7 @@ fun MemberContent(vm: AppViewModel, p: Profile) {
             Tile("মিল অন/অফ", true) { vm.go(Screen.Meal) },
             Tile("আমার ব্যালেন্স", true) { vm.openBills() },
             Tile("চাল", false, soon),
-            Tile("স্বচ্ছতা", false, soon),
+            Tile("স্বচ্ছতা ও ক্যাশ বুক", true) { vm.openTransparency("MESS") },
             Tile("পেমেন্ট ও রসিদ", true) { vm.openBills() },
             Tile("বিদ্যুৎ ও রাঁধুনি বিল", true) { vm.openBills("UTILITY") },
             Tile("ডিউটি", false, soon)
@@ -243,6 +243,7 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
     }
     tiles.add(Tile("পেমেন্ট ও চার্জ", true) { vm.openFinance("MESS") })
     tiles.add(Tile("বিদ্যুৎ ও রাঁধুনি বিল", true) { vm.openFinance("UTILITY") })
+    tiles.add(Tile("স্বচ্ছতা ও ক্যাশ বুক", true) { vm.openTransparency("MESS") })
     tiles.add(Tile("বাজার খরচ ও গেস্ট মিল", true) { vm.go(Screen.Expenses) })
     tiles.add(Tile("মিল ও রেট", true) { vm.go(Screen.Meal) })
     tiles.add(Tile("নোটিশ দিন", true) { vm.go(Screen.Notifications) })

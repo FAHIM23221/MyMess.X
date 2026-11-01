@@ -26,6 +26,7 @@ import com.messerp.app.data.NotifyScheduler
 import com.messerp.app.data.Push
 import com.messerp.app.data.PushRepository
 import com.messerp.app.data.AvatarRepository
+import com.messerp.app.data.CashBook
 import com.messerp.app.data.ImageUtil
 import com.messerp.app.data.AuthException
 import com.messerp.app.data.AuthRepository
@@ -39,6 +40,8 @@ import com.messerp.app.data.MealSummary
 import com.messerp.app.data.MemberLedger
 import com.messerp.app.data.PaymentRow
 import com.messerp.app.data.ReceiptPdf
+import com.messerp.app.data.Transparency
+import com.messerp.app.data.TransparencyRepository
 import com.messerp.app.data.Money
 import com.messerp.app.data.Dates
 import com.messerp.app.data.Profile
@@ -66,6 +69,8 @@ sealed interface Screen {
     data object Finance : Screen
     data object Notifications : Screen
     data object Managers : Screen
+    data object TransparencyPage : Screen
+    data object CashBookPage : Screen
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -77,6 +82,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val notifs = NotificationRepository(auth)
     private val pushRepo = PushRepository(auth)
     private val mgrRepo = ManagerRepository(auth)
+    private val tpRepo = TransparencyRepository(auth)
 
     var screen by mutableStateOf<Screen>(Screen.Splash)
         private set
@@ -135,6 +141,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var managerRows by mutableStateOf<List<ManagerRow>>(emptyList())
         private set
     var activeBook by mutableStateOf("MESS")
+        private set
+    var transparency by mutableStateOf<Transparency?>(null)
+        private set
+    var cashBook by mutableStateOf<CashBook?>(null)
+        private set
+    var tpBook by mutableStateOf("MESS")
+        private set
+    var tpMonth by mutableStateOf("")
         private set
     var myUtilLedger by mutableStateOf<MemberLedger?>(null)
         private set
@@ -766,6 +780,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         managerRows = emptyList()
         myUtilLedger = null
         activeBook = "MESS"
+        transparency = null
+        cashBook = null
+        tpBook = "MESS"
+        tpMonth = ""
     }
 
     fun loadNotifications() {
@@ -863,6 +881,49 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             mgrRepo.set(userId, type, active, general, meeting, reason)
             managerRows = mgrRepo.list()
             note(if (active) "ম্যানেজারের দায়িত্ব ও অনুমতি সংরক্ষিত হয়েছে।" else "ম্যানেজারের দায়িত্ব বাতিল হয়েছে।")
+        }
+    }
+
+    fun openTransparency(book: String = "MESS") {
+        tpBook = book
+        tpMonth = ""
+        transparency = null
+        cashBook = null
+        go(Screen.TransparencyPage)
+    }
+
+    fun openCashBook() {
+        cashBook = null
+        go(Screen.CashBookPage)
+    }
+
+    fun switchTpBook(book: String) {
+        tpBook = book
+        tpMonth = ""
+        transparency = null
+        cashBook = null
+        if (screen == Screen.CashBookPage) loadCashBook() else loadTransparency()
+    }
+
+    fun shiftTpMonth(delta: Int) {
+        if (tpMonth.isEmpty()) return
+        tpMonth = Dates.addMonths(tpMonth, delta)
+        if (screen == Screen.CashBookPage) loadCashBook() else loadTransparency()
+    }
+
+    fun loadTransparency() {
+        launchSafe {
+            val t = tpRepo.transparency(tpBook, tpMonth.ifEmpty { null })
+            transparency = t
+            if (tpMonth.isEmpty()) tpMonth = t.monthStart
+        }
+    }
+
+    fun loadCashBook() {
+        launchSafe {
+            val c = tpRepo.cashBook(tpBook, tpMonth.ifEmpty { null })
+            cashBook = c
+            if (tpMonth.isEmpty()) tpMonth = c.monthStart
         }
     }
 }

@@ -42,6 +42,7 @@ private fun categoryLabel(c: String) = when (c) {
     "RICE" -> "চাল"
     "GAS" -> "গ্যাস"
     "ELECTRICITY" -> "বিদ্যুৎ"
+    "CHEF" -> "রাঁধুনি"
     "WIFI" -> "ওয়াই-ফাই"
     "WATER" -> "পানি"
     "REPAIR" -> "মেরামত"
@@ -49,7 +50,7 @@ private fun categoryLabel(c: String) = when (c) {
     else -> "অন্যান্য"
 }
 
-private val CATEGORIES = listOf("MARKET", "RICE", "GAS", "ELECTRICITY", "WIFI", "WATER", "REPAIR", "CLEANING", "OTHER")
+private val CATEGORIES = listOf("MARKET", "RICE", "GAS", "WIFI", "WATER", "REPAIR", "CLEANING", "OTHER")
 
 @Composable
 fun ReasonDialog(title: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
@@ -247,7 +248,7 @@ fun ExpensesScreen(vm: AppViewModel) {
 
         SectionTitle("এ মাসের খরচের তালিকা")
         if (vm.expenses.isEmpty()) Text("এখনো কোনো খরচ নেই।", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        vm.expenses.forEach { e ->
+        vm.expenses.filter { it.category != "ELECTRICITY" && it.category != "CHEF" }.forEach { e ->
             AppCard {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     StatusChip(categoryLabel(e.category), positive = !e.voided)
