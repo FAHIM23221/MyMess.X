@@ -27,6 +27,9 @@ import com.messerp.app.data.Push
 import com.messerp.app.data.PushRepository
 import com.messerp.app.data.AvatarRepository
 import com.messerp.app.data.CashBook
+import com.messerp.app.data.DueBoard
+import com.messerp.app.data.DueRepository
+import com.messerp.app.data.DueStatus
 import com.messerp.app.data.ImageUtil
 import com.messerp.app.data.AuthException
 import com.messerp.app.data.AuthRepository
@@ -71,6 +74,7 @@ sealed interface Screen {
     data object Managers : Screen
     data object TransparencyPage : Screen
     data object CashBookPage : Screen
+    data object DuePage : Screen
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -83,6 +87,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val pushRepo = PushRepository(auth)
     private val mgrRepo = ManagerRepository(auth)
     private val tpRepo = TransparencyRepository(auth)
+    private val dueRepo = DueRepository(auth)
 
     var screen by mutableStateOf<Screen>(Screen.Splash)
         private set
@@ -147,6 +152,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var cashBook by mutableStateOf<CashBook?>(null)
         private set
     var tpBook by mutableStateOf("MESS")
+        private set
+    var dueStatus by mutableStateOf<DueStatus?>(null)
+        private set
+    var dueBoard by mutableStateOf<DueBoard?>(null)
         private set
     var tpMonth by mutableStateOf("")
         private set
@@ -230,6 +239,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         profile = p
         screen = Screen.Home
         startNotifications()
+        try {
+            if (p.role == Role.MEMBER) dueStatus = dueRepo.myStatus() else dueBoard = dueRepo.board()
+        } catch (e: Exception) {
+            // The due card appears once the server answers.
+        }
         try {
             managerRoles = mgrRepo.myRoles()
         } catch (e: Exception) {
@@ -756,6 +770,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     notifications = notifs.list(50)
                     popupQueue = notifs.popups()
                     managerRoles = mgrRepo.myRoles()
+                    if (profile?.role == Role.MEMBER) dueStatus = dueRepo.myStatus()
                     val h = notifs.headline()
                     headlineEnabled = h.first
                     headlineText = h.second
@@ -784,6 +799,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         cashBook = null
         tpBook = "MESS"
         tpMonth = ""
+        dueStatus = null
+        dueBoard = null
     }
 
     fun loadNotifications() {
@@ -924,6 +941,35 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val c = tpRepo.cashBook(tpBook, tpMonth.ifEmpty { null })
             cashBook = c
             if (tpMonth.isEmpty()) tpMonth = c.monthStart
+        }
+    }
+
+    fun openDue() {
+        go(Screen.DuePage)
+    }
+
+    fun loadDue() {
+        launchSafe {
+            if (profile?.role == Role.MEMBER) dueStatus = dueRepo.myStatus() else dueBoard = dueRepo.board()
+        }
+    }
+
+    fun saveDuePolicy(warningText: String, criticalText: String, suspend: Boolean, notify: Boolean, reason: String) {
+        fun minor(t: String): Long? = if (t.isBlank() || t.trim() == "0") 0L else Money.parseTakaToMinor(t)
+        val w = minor(warningText) ?: return error("সতর্কতার সীমা সঠিক নয়।")
+        val c = minor(criticalText) ?: return error("জরুরি সীমা সঠিক নয়।")
+        launchSafe {
+            dueRepo.setPolicy(w, c, suspend, notify, reason)
+            dueBoard = dueRepo.board()
+            note("নীতি সংরক্ষিত হয়েছে।")
+        }
+    }
+
+    fun overrideSuspension(memberId: String, days: Int, reason: String) {
+        launchSafe {
+            dueRepo.override(memberId, days, reason)
+            dueBoard = dueRepo.board()
+            note("সাময়িক ছাড় দেওয়া হয়েছে।")
         }
     }
 }

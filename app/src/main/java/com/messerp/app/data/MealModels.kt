@@ -18,7 +18,8 @@ data class MealStatus(
     val breakfast: Boolean,
     val lunch: Boolean,
     val dinner: Boolean,
-    val periods: List<OffPeriod>
+    val periods: List<OffPeriod>,
+    val suspended: Boolean = false
 )
 
 data class MemberMeal(
@@ -74,7 +75,8 @@ fun parseMealStatus(o: JSONObject): MealStatus {
         breakfast = o.getBoolean("breakfast"),
         lunch = o.getBoolean("lunch"),
         dinner = o.getBoolean("dinner"),
-        periods = (0 until arr.length()).map { parseOff(arr.getJSONObject(it)) }
+        periods = (0 until arr.length()).map { parseOff(arr.getJSONObject(it)) },
+        suspended = o.optBoolean("suspended", false)
     )
 }
 

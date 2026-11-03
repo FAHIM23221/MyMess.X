@@ -157,6 +157,13 @@ fun MealScreen(vm: AppViewModel) {
                 StatusChip("রাত: ${if (status.dinner) "চালু" else "বন্ধ"}", status.dinner)
             }
         }
+        if (status != null && status.suspended) {
+            Text(
+                "বকেয়ার কারণে আপনার মিল স্থগিত আছে। বকেয়া কমলে বা অ্যাডমিন ছাড় দিলে চালু হবে।",
+                color = MaterialTheme.colorScheme.error,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
         Text(
             "ডিফল্টে সব বেলা চালু থাকে। বন্ধ করলে ওই বেলা মিলের সংখ্যা থেকে বাদ যায় এবং শেষ তারিখের পর নিজে চালু হয়।",
             fontSize = 12.sp,

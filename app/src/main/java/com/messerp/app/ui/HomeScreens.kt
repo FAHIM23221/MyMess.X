@@ -151,6 +151,17 @@ fun MemberContent(vm: AppViewModel, p: Profile) {
         else -> Triple("বিদ্যুৎ ও রাঁধুনি বিল", "৳ " + Money.bn("0.00"), "কোনো বাকি নেই")
     }
     StatCard(ub.first, ub.second, Modifier.fillMaxWidth(), ub.third)
+    val ds = vm.dueStatus
+    if (ds != null && (ds.policy.configured || ds.status != "CLEAR")) {
+        AppCard(modifier = Modifier.clickable { vm.openDue() }) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("বকেয়ার অবস্থা", fontWeight = FontWeight.Bold)
+                StatusChip(dueLabel(ds.status), positive = ds.status == "CLEAR")
+            }
+            Text("মোট বকেয়া: " + Money.format(ds.totalDueMinor))
+            if (ds.suspended) Text("বকেয়ার কারণে আপনার মিল স্থগিত আছে।", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
+        }
+    }
     val st = vm.mealStatus
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (st != null) {
@@ -235,6 +246,15 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
         StatCard("মোট বকেয়া", vm.dues?.let { Money.format(it.totalDueMinor) } ?: "—", Modifier.weight(1f))
     }
 
+    vm.dueBoard?.let { b ->
+        if (b.policy.configured) {
+            StatCard(
+                "বকেয়ার সীমা পার করেছেন",
+                Money.bn(b.rows.count { it.status == "CRITICAL" }.toLong()) + " জরুরি, " + Money.bn(b.rows.count { it.status == "WARNING" }.toLong()) + " সতর্ক",
+                Modifier.fillMaxWidth()
+            )
+        }
+    }
     SectionTitle("দ্রুত কাজ")
     val tiles = mutableListOf(Tile("নতুন সদস্যের কোড", !vm.busy) { vm.createInvite(Role.MEMBER) })
     if (isMain) {
@@ -244,6 +264,7 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
     tiles.add(Tile("পেমেন্ট ও চার্জ", true) { vm.openFinance("MESS") })
     tiles.add(Tile("বিদ্যুৎ ও রাঁধুনি বিল", true) { vm.openFinance("UTILITY") })
     tiles.add(Tile("স্বচ্ছতা ও ক্যাশ বুক", true) { vm.openTransparency("MESS") })
+    tiles.add(Tile("বকেয়ার সীমা ও অবস্থা", true) { vm.openDue() })
     tiles.add(Tile("বাজার খরচ ও গেস্ট মিল", true) { vm.go(Screen.Expenses) })
     tiles.add(Tile("মিল ও রেট", true) { vm.go(Screen.Meal) })
     tiles.add(Tile("নোটিশ দিন", true) { vm.go(Screen.Notifications) })
