@@ -57,6 +57,7 @@ private fun MemberDueView(vm: AppViewModel) {
                 KeyValue("মোট বকেয়া", Money.format(ds.totalDueMinor))
                 KeyValue("মেসের খাতা", Money.format(ds.messDueMinor))
                 KeyValue("বিদ্যুৎ ও রাঁধুনি বিল", Money.format(ds.utilityDueMinor))
+                KeyValue("চালের বাকি (এ মাস)", com.messerp.app.data.Weight.format(ds.riceDueGrams))
             }
             if (ds.suspended) {
                 AppCard {

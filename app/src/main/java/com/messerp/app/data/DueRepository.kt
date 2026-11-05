@@ -14,7 +14,8 @@ data class DueStatus(
     val status: String,
     val suspended: Boolean,
     val overrideUntil: String?,
-    val policy: DuePolicy
+    val policy: DuePolicy,
+    val riceDueGrams: Long = 0
 ) {
     val warningMinor: Long get() = policy.warningMinor
     val criticalMinor: Long get() = policy.criticalMinor
@@ -68,7 +69,8 @@ class DueRepository(private val auth: AuthRepository) {
             status = o.getString("status"),
             suspended = o.optBoolean("suspended", false),
             overrideUntil = o.strOrNull("override_until"),
-            policy = parsePolicy(o.getJSONObject("policy"))
+            policy = parsePolicy(o.getJSONObject("policy")),
+            riceDueGrams = o.optLong("rice_due_grams", 0)
         )
     }
 

@@ -44,7 +44,12 @@ import com.messerp.app.data.MealRepository
 import com.messerp.app.data.MealStatus
 import com.messerp.app.data.MealSummary
 import com.messerp.app.data.MemberLedger
+import com.messerp.app.data.Fine
+import com.messerp.app.data.MemberRice
 import com.messerp.app.data.PaymentRow
+import com.messerp.app.data.RiceFineRepository
+import com.messerp.app.data.RiceSummary
+import com.messerp.app.data.Weight
 import com.messerp.app.data.Rotation
 import com.messerp.app.data.ReceiptPdf
 import com.messerp.app.data.Transparency
@@ -81,6 +86,8 @@ sealed interface Screen {
     data object DuePage : Screen
     data object DutyPage : Screen
     data object RotationPage : Screen
+    data object RicePage : Screen
+    data object FinesPage : Screen
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -96,6 +103,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val dueRepo = DueRepository(auth)
     private val dutyRepo = DutyRepository(auth)
     private val dutyIdem = Idem()
+    private val riceRepo = RiceFineRepository(auth)
+    private val riceIdem = Idem()
+    private val adjustIdem = Idem()
+    private val fineIdem = Idem()
+    private val payFineIdem = Idem()
 
     var screen by mutableStateOf<Screen>(Screen.Splash)
         private set
@@ -170,6 +182,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var roster by mutableStateOf<List<Duty>>(emptyList())
         private set
     var rotation by mutableStateOf<Rotation?>(null)
+        private set
+    var riceSummary by mutableStateOf<RiceSummary?>(null)
+        private set
+    var memberRice by mutableStateOf<MemberRice?>(null)
+        private set
+    var riceMember by mutableStateOf<String?>(null)
+        private set
+    var riceMonth by mutableStateOf("")
+        private set
+    var myFines by mutableStateOf<List<Fine>>(emptyList())
+        private set
+    var adminFines by mutableStateOf<List<Fine>>(emptyList())
         private set
     var historyFor by mutableStateOf<String?>(null)
         private set
@@ -834,6 +858,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         dueBoard = null
         myDuties = emptyList()
         adminDuties = emptyList()
+        riceSummary = null
+        memberRice = null
+        riceMember = null
+        riceMonth = ""
+        myFines = emptyList()
+        adminFines = emptyList()
         roster = emptyList()
         rotation = null
         historyFor = null
@@ -1115,6 +1145,147 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             dutyRepo.cancelRotation(id, reason)
             rotation = dutyRepo.rotation()
             note("নিয়োগ বাতিল হয়েছে।")
+        }
+    }
+
+    // ---------- Rice ----------
+    fun openRice() {
+        riceMember = null
+        riceMonth = ""
+        riceSummary = null
+        memberRice = null
+        go(Screen.RicePage)
+    }
+
+    private suspend fun refreshRice() {
+        val s = riceRepo.riceSummary(riceMonth.ifEmpty { null })
+        riceSummary = s
+        if (riceMonth.isEmpty()) riceMonth = s.monthStart
+        val target = riceMember ?: if (profile?.role == Role.MEMBER) profile?.id else null
+        memberRice = if (target != null) riceRepo.memberRice(if (target == profile?.id) null else target, riceMonth) else null
+    }
+
+    fun loadRice() {
+        launchSafe { refreshRice() }
+    }
+
+    fun shiftRiceMonth(delta: Int) {
+        if (riceMonth.isEmpty()) return
+        riceMonth = Dates.addMonths(riceMonth, delta)
+        loadRice()
+    }
+
+    fun selectRiceMember(id: String) {
+        riceMember = id
+        loadRice()
+    }
+
+    fun recordRice(memberId: String, kgText: String, date: String, noteText: String) {
+        if (memberId.isEmpty()) return error("কার চাল জমা নিচ্ছেন তা বাছুন।")
+        val grams = Weight.parseKgToGrams(kgText) ?: return error("সঠিক পরিমাণ দিন (কেজিতে, সর্বোচ্চ ৩ দশমিক ঘর, ১০০০ কেজির মধ্যে)।")
+        val reqId = riceIdem.idFor("$memberId|$grams|$date|${noteText.trim()}")
+        launchSafe {
+            riceRepo.record(memberId, grams, date, noteText, reqId)
+            riceIdem.clear()
+            refreshRice()
+            formVersion++
+            note("চাল জমা সংরক্ষিত হয়েছে।")
+        }
+    }
+
+    fun adjustRice(memberId: String, kgText: String, reason: String) {
+        if (memberId.isEmpty()) return error("সদস্য বাছুন।")
+        val grams = Weight.parseKgToGrams(kgText, allowNegative = true) ?: return error("সঠিক সংশোধন দিন (কমাতে - চিহ্ন দিন)।")
+        val month = riceMonth.ifEmpty { Dates.monthStart(Dates.todayDhaka()) }
+        val reqId = adjustIdem.idFor("$memberId|$month|$grams|${reason.trim()}")
+        launchSafe {
+            riceRepo.adjust(memberId, month, grams, reason, reqId)
+            adjustIdem.clear()
+            refreshRice()
+            formVersion++
+            note("সংশোধন সংরক্ষিত হয়েছে।")
+        }
+    }
+
+    fun reverseRice(id: String, reason: String) {
+        launchSafe {
+            riceRepo.reverse(id, reason)
+            refreshRice()
+            note("এন্ট্রি বাতিল হয়েছে।")
+        }
+    }
+
+    fun saveRicePolicy(kgText: String, reason: String) {
+        val grams = if (kgText.isBlank() || kgText.trim() == "0") 0L else Weight.parseKgToGrams(kgText)
+            ?: return error("সঠিক পরিমাণ দিন।")
+        launchSafe {
+            riceRepo.setPolicy(grams, reason)
+            refreshRice()
+            note("নীতি সংরক্ষিত হয়েছে।")
+        }
+    }
+
+    fun saveRiceRequirement(memberId: String, kgText: String, reason: String) {
+        if (memberId.isEmpty()) return error("সদস্য বাছুন।")
+        val grams = if (kgText.trim() == "0") 0L else Weight.parseKgToGrams(kgText) ?: return error("সঠিক পরিমাণ দিন।")
+        val month = riceMonth.ifEmpty { Dates.monthStart(Dates.todayDhaka()) }
+        launchSafe {
+            riceRepo.setRequirement(memberId, month, grams, reason)
+            refreshRice()
+            note("নির্ধারিত পরিমাণ সংরক্ষিত হয়েছে।")
+        }
+    }
+
+    // ---------- Fines ----------
+    fun openFines() {
+        go(Screen.FinesPage)
+    }
+
+    private suspend fun refreshFines() {
+        if (profile?.role == Role.MEMBER) {
+            myFines = riceRepo.myFines()
+        } else {
+            adminFines = riceRepo.adminFines()
+            if (members.isEmpty()) members = admin.listMembers()
+        }
+    }
+
+    fun loadFines() {
+        launchSafe { refreshFines() }
+    }
+
+    fun addFine(memberId: String, amountText: String, reason: String, date: String) {
+        if (memberId.isEmpty()) return error("কাকে জরিমানা করছেন তা বাছুন।")
+        val minor = Money.parseTakaToMinor(amountText) ?: return error("সঠিক পরিমাণ দিন (১ থেকে ১০,০০,০০০ টাকা)।")
+        if (reason.trim().length < 3) return error("জরিমানার কারণ লিখুন (কমপক্ষে ৩ অক্ষর)।")
+        val reqId = fineIdem.idFor("$memberId|$minor|${reason.trim()}|$date")
+        launchSafe {
+            riceRepo.addFine(memberId, minor, reason, date, reqId)
+            fineIdem.clear()
+            refreshFines()
+            formVersion++
+            note("জরিমানা দেওয়া হয়েছে। সদস্য বিজ্ঞপ্তি পাবেন।")
+        }
+    }
+
+    fun payFine(fineId: String, amountText: String, method: String, date: String, memo: String, txn: String) {
+        val minor = Money.parseTakaToMinor(amountText) ?: return error("সঠিক পরিমাণ দিন।")
+        val reqId = payFineIdem.idFor("$fineId|$minor|$method|$date|${txn.trim()}")
+        launchSafe {
+            val r = riceRepo.payFine(fineId, minor, method, date, memo, txn, reqId)
+            payFineIdem.clear()
+            lastPaymentId = r.first
+            lastReceiptNo = r.second
+            refreshFines()
+            note("পরিশোধ সংরক্ষিত হয়েছে। রসিদ নম্বর: " + r.second)
+        }
+    }
+
+    fun voidFine(id: String, reason: String) {
+        launchSafe {
+            riceRepo.voidFine(id, reason)
+            refreshFines()
+            note("জরিমানা বাতিল হয়েছে।")
         }
     }
 }

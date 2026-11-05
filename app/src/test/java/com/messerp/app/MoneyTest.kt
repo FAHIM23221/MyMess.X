@@ -3,6 +3,7 @@ package com.messerp.app
 import com.messerp.app.data.Dates
 import com.messerp.app.data.Money
 import com.messerp.app.data.ReceiptPdf
+import com.messerp.app.data.Weight
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -55,5 +56,22 @@ class MoneyTest {
         assertEquals("২৫ অক্টোবর ২০২৬, রাত ১২:০৫", ReceiptPdf.formatLocal("2026-10-25 00:05"))
         assertEquals("১ নভেম্বর ২০২৬", Dates.bnDate("2026-11-01"))
         assertEquals("অক্টোবর ২০২৬", Dates.bnMonth("2026-10-01"))
+    }
+
+    @Test fun parsesRiceKilograms() {
+        assertEquals(2500L, Weight.parseKgToGrams("2.5"))
+        assertEquals(15000L, Weight.parseKgToGrams("১৫"))
+        assertEquals(1L, Weight.parseKgToGrams("0.001"))
+        assertEquals(-1000L, Weight.parseKgToGrams("-1", allowNegative = true))
+        assertNull(Weight.parseKgToGrams("0"))
+        assertNull(Weight.parseKgToGrams("1.2345"))
+        assertNull(Weight.parseKgToGrams("-1"))
+        assertNull(Weight.parseKgToGrams("1001"))
+    }
+
+    @Test fun formatsRiceWeight() {
+        assertEquals("১৫ কেজি", Weight.format(15000L))
+        assertEquals("২.৫ কেজি", Weight.format(2500L))
+        assertEquals("০.০০১ কেজি", Weight.format(1L))
     }
 }

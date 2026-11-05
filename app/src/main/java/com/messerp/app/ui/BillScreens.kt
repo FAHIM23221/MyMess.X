@@ -165,7 +165,7 @@ fun FinanceScreen(vm: AppViewModel) {
     if (!isAdmin && !(utility && vm.isBillMgr)) return
     val isMain = p.role == Role.MAIN_ADMIN
     val today = vm.mealStatus?.today ?: Dates.todayDhaka()
-    val cats = if (utility) listOf("ELECTRICITY", "CHEF") else listOf("SEAT_RENT", "WIFI", "GAS", "WATER", "FINE", "OTHER")
+    val cats = if (utility) listOf("ELECTRICITY", "CHEF") else listOf("SEAT_RENT", "WIFI", "GAS", "WATER", "OTHER")
     val people = vm.dues?.members ?: emptyList()
     val others = people.filter { it.id != p.id }
 

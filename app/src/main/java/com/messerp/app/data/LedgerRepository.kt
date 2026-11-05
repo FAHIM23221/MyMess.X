@@ -12,6 +12,7 @@ class LedgerRepository(private val auth: AuthRepository) {
     private fun fail(res: HttpResult): Nothing {
         val msg = runCatching { JSONObject(res.body).optString("message") }.getOrDefault("")
         val text = when {
+            msg.contains("use_fines") -> "জরিমানা শুধু \"জরিমানা\" পাতা থেকে দিন।"
             msg.contains("cannot_self") -> "নিজের নামে এই কাজ করা যায় না। অন্য অ্যাডমিনকে দিয়ে করান।"
             msg.contains("forbidden") -> "এই কাজের অনুমতি আপনার নেই।"
             msg.contains("invalid_amount") -> "পরিমাণ সঠিক নয়।"
