@@ -21,6 +21,8 @@ import com.messerp.app.ui.NotificationsScreen
 import com.messerp.app.ui.BillsScreen
 import com.messerp.app.ui.CashBookScreen
 import com.messerp.app.ui.DueScreen
+import com.messerp.app.ui.DutyScreen
+import com.messerp.app.ui.RotationScreen
 import com.messerp.app.ui.TransparencyScreen
 import com.messerp.app.ui.ExpensesScreen
 import com.messerp.app.ui.FinanceScreen
@@ -74,6 +76,14 @@ class MainActivity : ComponentActivity() {
                         Screen.TransparencyPage -> {
                             BackHandler { vm.go(Screen.Home) }
                             TransparencyScreen(vm)
+                        }
+                        Screen.DutyPage -> {
+                            BackHandler { vm.go(Screen.Home) }
+                            DutyScreen(vm)
+                        }
+                        Screen.RotationPage -> {
+                            BackHandler { vm.go(Screen.Home) }
+                            RotationScreen(vm)
                         }
                         Screen.DuePage -> {
                             BackHandler { vm.go(Screen.Home) }

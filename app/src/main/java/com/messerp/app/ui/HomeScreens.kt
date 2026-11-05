@@ -106,6 +106,7 @@ fun HomeScreen(vm: AppViewModel) {
             Role.ADMIN -> AdminContent(vm, p, false)
             Role.MAIN_ADMIN -> AdminContent(vm, p, true)
         }
+        ManagerCard(vm)
         MyInfoCard(vm, p)
     }
     vm.popupQueue.firstOrNull()?.let { n -> NoticePopup(n) { vm.dismissPopup(n.id) } }
@@ -122,7 +123,7 @@ fun MyInfoCard(vm: AppViewModel, p: Profile) {
         KeyValue("রোল", roleLabel(p.role))
         if (p.role == Role.MEMBER) {
             KeyValue("রুম / সিট", "${p.roomNo ?: "—"} / ${p.seatNo ?: "—"}")
-            KeyValue("ম্যানেজার", if (p.isCurrentManager) "হ্যাঁ" else "না")
+            KeyValue("ম্যানেজার", if (vm.isManagerNow) "হ্যাঁ" else "না")
         }
         KeyValue("যোগদান", Dates.bnDate(p.joinDate))
     }
@@ -180,7 +181,7 @@ fun MemberContent(vm: AppViewModel, p: Profile) {
             Tile("স্বচ্ছতা ও ক্যাশ বুক", true) { vm.openTransparency("MESS") },
             Tile("পেমেন্ট ও রসিদ", true) { vm.openBills() },
             Tile("বিদ্যুৎ ও রাঁধুনি বিল", true) { vm.openBills("UTILITY") },
-            Tile("ডিউটি", false, soon)
+            Tile("ডিউটি", true) { vm.openDuties() }
         )
     )
     if (vm.isMealMgr || vm.isBillMgr || vm.canPublish) {
@@ -193,6 +194,14 @@ fun MemberContent(vm: AppViewModel, p: Profile) {
         if (vm.isBillMgr) mt.add(Tile("বিদ্যুৎ ও রাঁধুনি বিল ম্যানেজ", true) { vm.openFinance("UTILITY") })
         if (vm.canPublish) mt.add(Tile("নোটিশ ও নোটিফিকেশন", true) { vm.go(Screen.Notifications) })
         TileGrid(mt)
+    }
+    val nextDuty = vm.myDuties.firstOrNull { it.status == "PENDING" }
+    AppCard(modifier = Modifier.clickable { vm.openDuties() }) {
+        Text("আমার পরবর্তী ডিউটি", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            if (nextDuty == null) "কোনো অপেক্ষমাণ ডিউটি নেই" else dutyLabel(nextDuty.type) + " · " + Dates.bnDate(nextDuty.date),
+            fontWeight = FontWeight.SemiBold
+        )
     }
     val latest = vm.notifications.firstOrNull { it.kind == "NOTICE" }
     AppCard(modifier = Modifier.clickable { vm.go(Screen.Notifications) }) {
@@ -265,6 +274,7 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
     tiles.add(Tile("বিদ্যুৎ ও রাঁধুনি বিল", true) { vm.openFinance("UTILITY") })
     tiles.add(Tile("স্বচ্ছতা ও ক্যাশ বুক", true) { vm.openTransparency("MESS") })
     tiles.add(Tile("বকেয়ার সীমা ও অবস্থা", true) { vm.openDue() })
+    tiles.add(Tile("ডিউটি ও রোটেশন", true) { vm.openDuties() })
     tiles.add(Tile("বাজার খরচ ও গেস্ট মিল", true) { vm.go(Screen.Expenses) })
     tiles.add(Tile("মিল ও রেট", true) { vm.go(Screen.Meal) })
     tiles.add(Tile("নোটিশ দিন", true) { vm.go(Screen.Notifications) })
@@ -304,7 +314,7 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
         SectionTitle("নিয়ন্ত্রণ")
         ReadyRow("ম্যানেজার ও নোটিশের অনুমতি") { vm.openManagers() }
         ControlRow("বকেয়ার সীমা ও মিল নীতি", soon)
-        ControlRow("ম্যানেজার রোটেশন", soon)
+        ReadyRow("ম্যানেজার রোটেশন") { vm.openRotation() }
         ControlRow("অডিট লগ", soon)
         ControlRow("CSV রিপোর্ট", soon)
         ControlRow("নিরাপত্তা সেটিংস", soon)
@@ -415,7 +425,7 @@ fun ProfileScreen(vm: AppViewModel) {
             KeyValue("যোগদান", Dates.bnDate(p.joinDate))
             KeyValue("অবস্থা", if (p.isActive) "সক্রিয়" else "স্থগিত")
             KeyValue("রোল", roleLabel(p.role))
-            if (p.role == Role.MEMBER) KeyValue("বর্তমান ম্যানেজার", if (p.isCurrentManager) "হ্যাঁ" else "না")
+            if (p.role == Role.MEMBER) KeyValue("বর্তমান ম্যানেজার", if (vm.isManagerNow) "হ্যাঁ" else "না")
         }
         SectionTitle("তথ্য সম্পাদনা")
         Field("নাম", name, { name = it })

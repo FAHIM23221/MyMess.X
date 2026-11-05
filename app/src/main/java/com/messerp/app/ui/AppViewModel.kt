@@ -30,6 +30,9 @@ import com.messerp.app.data.CashBook
 import com.messerp.app.data.DueBoard
 import com.messerp.app.data.DueRepository
 import com.messerp.app.data.DueStatus
+import com.messerp.app.data.Duty
+import com.messerp.app.data.DutyEvent
+import com.messerp.app.data.DutyRepository
 import com.messerp.app.data.ImageUtil
 import com.messerp.app.data.AuthException
 import com.messerp.app.data.AuthRepository
@@ -42,6 +45,7 @@ import com.messerp.app.data.MealStatus
 import com.messerp.app.data.MealSummary
 import com.messerp.app.data.MemberLedger
 import com.messerp.app.data.PaymentRow
+import com.messerp.app.data.Rotation
 import com.messerp.app.data.ReceiptPdf
 import com.messerp.app.data.Transparency
 import com.messerp.app.data.TransparencyRepository
@@ -75,6 +79,8 @@ sealed interface Screen {
     data object TransparencyPage : Screen
     data object CashBookPage : Screen
     data object DuePage : Screen
+    data object DutyPage : Screen
+    data object RotationPage : Screen
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -88,6 +94,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val mgrRepo = ManagerRepository(auth)
     private val tpRepo = TransparencyRepository(auth)
     private val dueRepo = DueRepository(auth)
+    private val dutyRepo = DutyRepository(auth)
+    private val dutyIdem = Idem()
 
     var screen by mutableStateOf<Screen>(Screen.Splash)
         private set
@@ -155,6 +163,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var dueStatus by mutableStateOf<DueStatus?>(null)
         private set
+    var myDuties by mutableStateOf<List<Duty>>(emptyList())
+        private set
+    var adminDuties by mutableStateOf<List<Duty>>(emptyList())
+        private set
+    var roster by mutableStateOf<List<Duty>>(emptyList())
+        private set
+    var rotation by mutableStateOf<Rotation?>(null)
+        private set
+    var historyFor by mutableStateOf<String?>(null)
+        private set
+    var history by mutableStateOf<List<DutyEvent>>(emptyList())
+        private set
+    val isManagerNow: Boolean get() = rotation?.rows?.any { it.phase == "CURRENT" && it.memberId == profile?.id } == true
     var dueBoard by mutableStateOf<DueBoard?>(null)
         private set
     var tpMonth by mutableStateOf("")
@@ -239,6 +260,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         profile = p
         screen = Screen.Home
         startNotifications()
+        try {
+            rotation = dutyRepo.rotation()
+            if (p.role == Role.MEMBER) myDuties = dutyRepo.myDuties()
+        } catch (e: Exception) {
+            // The manager and duty cards appear once the server answers.
+        }
         try {
             if (p.role == Role.MEMBER) dueStatus = dueRepo.myStatus() else dueBoard = dueRepo.board()
         } catch (e: Exception) {
@@ -770,7 +797,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     notifications = notifs.list(50)
                     popupQueue = notifs.popups()
                     managerRoles = mgrRepo.myRoles()
-                    if (profile?.role == Role.MEMBER) dueStatus = dueRepo.myStatus()
+                    if (profile?.role == Role.MEMBER) {
+                        dueStatus = dueRepo.myStatus()
+                        myDuties = dutyRepo.myDuties()
+                    }
+                    rotation = dutyRepo.rotation()
                     val h = notifs.headline()
                     headlineEnabled = h.first
                     headlineText = h.second
@@ -801,6 +832,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         tpMonth = ""
         dueStatus = null
         dueBoard = null
+        myDuties = emptyList()
+        adminDuties = emptyList()
+        roster = emptyList()
+        rotation = null
+        historyFor = null
+        history = emptyList()
     }
 
     fun loadNotifications() {
@@ -970,6 +1007,114 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             dueRepo.override(memberId, days, reason)
             dueBoard = dueRepo.board()
             note("সাময়িক ছাড় দেওয়া হয়েছে।")
+        }
+    }
+
+    fun openDuties() {
+        historyFor = null
+        history = emptyList()
+        go(Screen.DutyPage)
+    }
+
+    fun loadDuties() {
+        launchSafe {
+            roster = dutyRepo.roster()
+            if (profile?.role == Role.MEMBER) {
+                myDuties = dutyRepo.myDuties()
+            } else {
+                adminDuties = dutyRepo.adminDuties()
+                if (members.isEmpty()) members = admin.listMembers()
+            }
+        }
+    }
+
+    private suspend fun refreshDuties() {
+        roster = dutyRepo.roster()
+        if (profile?.role == Role.MEMBER) myDuties = dutyRepo.myDuties() else adminDuties = dutyRepo.adminDuties()
+    }
+
+    fun showHistory(id: String) {
+        if (historyFor == id) {
+            historyFor = null
+            history = emptyList()
+            return
+        }
+        historyFor = id
+        history = emptyList()
+        launchSafe { history = dutyRepo.history(id) }
+    }
+
+    fun assignDuty(memberId: String, type: String, date: String, notes: String) {
+        if (memberId.isEmpty()) return error("কাকে ডিউটি দেবেন তা বাছুন।")
+        val reqId = dutyIdem.idFor("$memberId|$type|$date|${notes.trim()}")
+        launchSafe {
+            dutyRepo.assign(memberId, type, date, notes, reqId)
+            dutyIdem.clear()
+            refreshDuties()
+            formVersion++
+            note("ডিউটি দেওয়া হয়েছে। সদস্য বিজ্ঞপ্তি পাবেন।")
+        }
+    }
+
+    fun completeDuty(id: String, noteText: String) {
+        launchSafe {
+            dutyRepo.complete(id, noteText)
+            refreshDuties()
+            note("ডিউটি সম্পন্ন হিসেবে চিহ্নিত হয়েছে।")
+        }
+    }
+
+    fun cannotDoDuty(id: String, reason: String) {
+        launchSafe {
+            dutyRepo.cannot(id, reason)
+            refreshDuties()
+            note("অ্যাডমিনকে জানানো হয়েছে।")
+        }
+    }
+
+    fun reassignDuty(id: String, newMember: String, reason: String) {
+        launchSafe {
+            dutyRepo.reassign(id, newMember, reason)
+            refreshDuties()
+            note("ডিউটি অন্যজনকে দেওয়া হয়েছে।")
+        }
+    }
+
+    fun cancelDuty(id: String, reason: String) {
+        launchSafe {
+            dutyRepo.cancel(id, reason)
+            refreshDuties()
+            note("ডিউটি বাতিল হয়েছে।")
+        }
+    }
+
+    fun openRotation() {
+        go(Screen.RotationPage)
+    }
+
+    fun loadRotation() {
+        launchSafe {
+            rotation = dutyRepo.rotation()
+            if (profile?.role == Role.MAIN_ADMIN && members.isEmpty()) members = admin.listMembers()
+        }
+    }
+
+    fun saveRotation(memberId: String, start: String, end: String, noteText: String, overlap: Boolean) {
+        if (memberId.isEmpty()) return error("কাকে ম্যানেজার করবেন তা বাছুন।")
+        if (end < start) return error("শেষ তারিখ শুরুর তারিখের আগে হতে পারে না।")
+        launchSafe {
+            dutyRepo.setRotation(memberId, start, end, noteText, overlap)
+            rotation = dutyRepo.rotation()
+            formVersion++
+            note("ম্যানেজার নিয়োগ সংরক্ষিত হয়েছে। সদস্য বিজ্ঞপ্তি পাবেন।")
+        }
+    }
+
+    fun cancelRotation(id: String, reason: String) {
+        launchSafe {
+            dutyRepo.cancelRotation(id, reason)
+            rotation = dutyRepo.rotation()
+            note("নিয়োগ বাতিল হয়েছে।")
         }
     }
 }
