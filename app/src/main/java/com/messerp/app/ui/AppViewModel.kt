@@ -27,6 +27,14 @@ import com.messerp.app.data.Push
 import com.messerp.app.data.PushRepository
 import com.messerp.app.data.AvatarRepository
 import com.messerp.app.data.CashBook
+import com.messerp.app.data.ChatMessage
+import com.messerp.app.data.ChatRead
+import com.messerp.app.data.ChatRepository
+import com.messerp.app.data.ChatScheduler
+import com.messerp.app.data.ChatStore
+import com.messerp.app.data.ChatSync
+import com.messerp.app.data.Conversation
+import com.messerp.app.data.OutboxItem
 import com.messerp.app.data.DueBoard
 import com.messerp.app.data.DueRepository
 import com.messerp.app.data.DueStatus
@@ -88,6 +96,8 @@ sealed interface Screen {
     data object RotationPage : Screen
     data object RicePage : Screen
     data object FinesPage : Screen
+    data object ChatListPage : Screen
+    data object ChatPage : Screen
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -104,6 +114,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val dutyRepo = DutyRepository(auth)
     private val dutyIdem = Idem()
     private val riceRepo = RiceFineRepository(auth)
+    private val chatRepo = ChatRepository(auth)
+    private val chatStore = ChatStore(app)
+    private var chatJob: Job? = null
+    private var chatSince: Long? = null
+    private var lastTypingSent = 0L
+    private var serverMsgs = LinkedHashMap<String, ChatMessage>()
     private val riceIdem = Idem()
     private val adjustIdem = Idem()
     private val fineIdem = Idem()
@@ -193,6 +209,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var myFines by mutableStateOf<List<Fine>>(emptyList())
         private set
+    var conversations by mutableStateOf<List<Conversation>>(emptyList())
+        private set
+    var currentConv by mutableStateOf<Conversation?>(null)
+        private set
+    var chatMessages by mutableStateOf<List<ChatMessage>>(emptyList())
+        private set
+    var chatReads by mutableStateOf<List<ChatRead>>(emptyList())
+        private set
+    var chatTyping by mutableStateOf<List<String>>(emptyList())
+        private set
+    var chatOffline by mutableStateOf(false)
+        private set
+    val chatUnread: Int get() = conversations.sumOf { it.unread }
     var adminFines by mutableStateOf<List<Fine>>(emptyList())
         private set
     var historyFor by mutableStateOf<String?>(null)
@@ -228,6 +257,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun go(target: Screen) {
+        if (target != Screen.ChatPage) stopChatLoop()
         message = null
         screen = target
     }
@@ -284,6 +314,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         profile = p
         screen = Screen.Home
         startNotifications()
+        conversations = chatStore.loadConversations(p.id)
+        viewModelScope.launch {
+            try {
+                ChatSync.flush(chatRepo, chatStore, p.id)
+                conversations = chatRepo.conversations()
+                chatStore.saveConversations(p.id, conversations)
+            } catch (e: Exception) {
+                // Chat refreshes when the phone is online again.
+            }
+        }
         try {
             rotation = dutyRepo.rotation()
             if (p.role == Role.MEMBER) myDuties = dutyRepo.myDuties()
@@ -383,7 +423,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 // The server removes dead tokens by itself later.
             }
+            val chatUid = profile?.id
             auth.signOut()
+            if (chatUid != null) chatStore.clearUser(chatUid)
             profile = null
             members = emptyList()
             lastInvite = null
@@ -826,6 +868,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         myDuties = dutyRepo.myDuties()
                     }
                     rotation = dutyRepo.rotation()
+                    if (screen != Screen.ChatPage) {
+                        conversations = chatRepo.conversations()
+                        profile?.let { chatStore.saveConversations(it.id, conversations) }
+                    }
                     val h = notifs.headline()
                     headlineEnabled = h.first
                     headlineText = h.second
@@ -858,6 +904,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         dueBoard = null
         myDuties = emptyList()
         adminDuties = emptyList()
+        conversations = emptyList()
+        currentConv = null
+        chatMessages = emptyList()
+        chatReads = emptyList()
+        chatTyping = emptyList()
         riceSummary = null
         memberRice = null
         riceMember = null
@@ -1286,6 +1337,177 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             riceRepo.voidFine(id, reason)
             refreshFines()
             note("জরিমানা বাতিল হয়েছে।")
+        }
+    }
+
+    // ---------- Chat (text only; unsent messages wait on the phone) ----------
+    private fun uid(): String = profile?.id ?: ""
+
+    private fun rebuildChat() {
+        val conv = currentConv ?: return
+        val server = serverMsgs.values.sortedWith(compareBy({ it.ts }, { it.id }))
+        val queued = chatStore.loadOutbox(uid()).filter { it.conversationId == conv.id }.sortedBy { it.createdMs }.map {
+            ChatMessage(it.id, it.conversationId, uid(), profile?.fullName, it.body, Long.MAX_VALUE, Long.MAX_VALUE, Dates.nowDhakaLocal(), false, false, it.state)
+        }
+        chatMessages = server + queued.filter { q -> server.none { it.id == q.id } }
+    }
+
+    fun ensureMembersLoaded() {
+        if (members.isNotEmpty() || profile?.role == Role.MEMBER) return
+        viewModelScope.launch {
+            try {
+                members = admin.listMembers()
+            } catch (e: Exception) {
+                // The member picker stays empty until the next visit.
+            }
+        }
+    }
+
+    fun loadConversations() {
+        viewModelScope.launch {
+            try {
+                conversations = chatRepo.conversations()
+                chatStore.saveConversations(uid(), conversations)
+                chatOffline = false
+            } catch (e: Exception) {
+                chatOffline = true
+            }
+        }
+    }
+
+    fun openChatList() {
+        conversations = chatStore.loadConversations(uid())
+        go(Screen.ChatListPage)
+        loadConversations()
+    }
+
+    fun openChat(conv: Conversation) {
+        currentConv = conv
+        serverMsgs = LinkedHashMap()
+        for (m in chatStore.loadMessages(uid(), conv.id)) serverMsgs[m.id] = m
+        chatSince = null
+        chatReads = emptyList()
+        chatTyping = emptyList()
+        rebuildChat()
+        go(Screen.ChatPage)
+        startChatLoop(conv)
+    }
+
+    fun startPrivateWith(memberId: String) {
+        launchSafe {
+            val id = chatRepo.openPrivate(memberId)
+            conversations = chatRepo.conversations()
+            chatStore.saveConversations(uid(), conversations)
+            val c = conversations.firstOrNull { it.id == id } ?: throw AuthException("কথোপকথন পাওয়া যায়নি।")
+            openChat(c)
+        }
+    }
+
+    private fun stopChatLoop() {
+        chatJob?.cancel()
+        chatJob = null
+        currentConv = null
+    }
+
+    private suspend fun flushOutboxInternal() {
+        val sent = ChatSync.flush(chatRepo, chatStore, uid())
+        val conv = currentConv
+        for (m in sent) if (conv != null && m.conversationId == conv.id) serverMsgs[m.id] = m
+        if (sent.isNotEmpty()) rebuildChat()
+    }
+
+    private fun startChatLoop(conv: Conversation) {
+        chatJob?.cancel()
+        chatJob = viewModelScope.launch {
+            while (true) {
+                try {
+                    flushOutboxInternal()
+                    val batch = chatRepo.messages(conv.id, chatSince, null, 50)
+                    for (m in batch.messages) serverMsgs[m.id] = m
+                    while (serverMsgs.size > 300) serverMsgs.remove(serverMsgs.keys.first())
+                    chatStore.saveMessages(uid(), conv.id, serverMsgs.values.sortedBy { it.ts })
+                    // A little overlap makes sure a message committed just before this check is not missed.
+                    chatSince = batch.serverTs - 2_000_000L
+                    chatReads = batch.reads
+                    chatTyping = batch.typing
+                    chatOffline = false
+                    rebuildChat()
+                    chatRepo.markRead(conv.id)
+                } catch (e: Exception) {
+                    chatOffline = true
+                    rebuildChat()
+                }
+                delay(2500)
+            }
+        }
+    }
+
+    fun sendChat(text: String) {
+        val conv = currentConv ?: return
+        val body = text.trim()
+        if (body.isEmpty()) return
+        if (body.length > 1000) return error("বার্তা সর্বোচ্চ ১০০০ অক্ষরের হতে পারে।")
+        chatStore.addOutbox(uid(), OutboxItem(UUID.randomUUID().toString(), conv.id, body, System.currentTimeMillis(), "QUEUED"))
+        rebuildChat()
+        ChatScheduler.enqueue(getApplication<Application>())
+        viewModelScope.launch {
+            try {
+                flushOutboxInternal()
+            } catch (e: Exception) {
+                chatOffline = true
+            }
+        }
+    }
+
+    fun retryChat(id: String) {
+        chatStore.setOutboxState(uid(), id, "QUEUED")
+        rebuildChat()
+        ChatScheduler.enqueue(getApplication<Application>())
+        viewModelScope.launch {
+            try {
+                flushOutboxInternal()
+            } catch (e: Exception) {
+                chatOffline = true
+            }
+        }
+    }
+
+    fun discardChat(id: String) {
+        chatStore.removeOutbox(uid(), id)
+        rebuildChat()
+    }
+
+    fun editChat(id: String, body: String) {
+        val conv = currentConv ?: return
+        launchSafe {
+            val m = chatRepo.edit(id, body)
+            serverMsgs[m.id] = m
+            chatStore.saveMessages(uid(), conv.id, serverMsgs.values.sortedBy { it.ts })
+            rebuildChat()
+        }
+    }
+
+    fun deleteChat(id: String) {
+        val conv = currentConv ?: return
+        launchSafe {
+            val m = chatRepo.delete(id)
+            serverMsgs[m.id] = m
+            chatStore.saveMessages(uid(), conv.id, serverMsgs.values.sortedBy { it.ts })
+            rebuildChat()
+        }
+    }
+
+    fun onChatTyping() {
+        val conv = currentConv ?: return
+        val now = System.currentTimeMillis()
+        if (now - lastTypingSent < 3000) return
+        lastTypingSent = now
+        viewModelScope.launch {
+            try {
+                chatRepo.typing(conv.id)
+            } catch (e: Exception) {
+                // Typing is only a hint.
+            }
         }
     }
 }

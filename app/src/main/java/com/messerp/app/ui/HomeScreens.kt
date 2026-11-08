@@ -82,7 +82,11 @@ fun AppScaffold(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             content = content
         )
-        BottomBar(active, vm.unreadCount, { vm.go(Screen.Home) }, { vm.go(Screen.Meal) }, { vm.go(Screen.Notifications) }, { vm.go(Screen.ProfileScreen) })
+        BottomBar(
+            active, vm.unreadCount, vm.chatUnread,
+            { vm.go(Screen.Home) }, { vm.go(Screen.Meal) }, { vm.go(Screen.Notifications) },
+            { vm.openChatList() }, { vm.go(Screen.ProfileScreen) }
+        )
     }
 }
 
@@ -407,7 +411,7 @@ fun ProfileScreen(vm: AppViewModel) {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) vm.uploadAvatar(uri)
     }
-    AppScaffold(vm, 3, "প্রোফাইল", "আমার তথ্য") {
+    AppScaffold(vm, 4, "প্রোফাইল", "আমার তথ্য") {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             AvatarCircle(vm, p.avatarUrl, p.fullName, 72.dp)
             Column {

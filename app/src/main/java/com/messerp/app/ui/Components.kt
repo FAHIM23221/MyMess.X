@@ -160,8 +160,11 @@ fun SectionTitle(text: String) {
 }
 
 @Composable
-fun BottomBar(active: Int, unread: Int, onHome: () -> Unit, onMeal: () -> Unit, onNotices: () -> Unit, onProfile: () -> Unit) {
-    val labels = listOf("হোম", "মিল", "নোটিশ", "প্রোফাইল")
+fun BottomBar(
+    active: Int, unread: Int, chatUnread: Int,
+    onHome: () -> Unit, onMeal: () -> Unit, onNotices: () -> Unit, onChat: () -> Unit, onProfile: () -> Unit
+) {
+    val labels = listOf("হোম", "মিল", "নোটিশ", "বার্তা", "প্রোফাইল")
     val c = MaterialTheme.colorScheme
     Surface(color = c.surface, shadowElevation = 6.dp) {
         Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
@@ -170,6 +173,7 @@ fun BottomBar(active: Int, unread: Int, onHome: () -> Unit, onMeal: () -> Unit, 
                     0 -> onHome
                     1 -> onMeal
                     2 -> onNotices
+                    3 -> onChat
                     else -> onProfile
                 }
                 val isActive = i == active
@@ -184,7 +188,11 @@ fun BottomBar(active: Int, unread: Int, onHome: () -> Unit, onMeal: () -> Unit, 
                             .background(if (isActive) c.primary else Color.Transparent)
                     )
                     Text(
-                        if (i == 2 && unread > 0) label + " (" + Money.bn(unread.toLong()) + ")" else label,
+                        when {
+                            i == 2 && unread > 0 -> label + " (" + Money.bn(unread.toLong()) + ")"
+                            i == 3 && chatUnread > 0 -> label + " (" + Money.bn(chatUnread.toLong()) + ")"
+                            else -> label
+                        },
                         modifier = Modifier.padding(vertical = 14.dp),
                         fontSize = 13.sp,
                         fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,

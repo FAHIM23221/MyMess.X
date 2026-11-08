@@ -20,6 +20,8 @@ import com.messerp.app.ui.AppViewModel
 import com.messerp.app.ui.NotificationsScreen
 import com.messerp.app.ui.BillsScreen
 import com.messerp.app.ui.CashBookScreen
+import com.messerp.app.ui.ChatListScreen
+import com.messerp.app.ui.ChatScreen
 import com.messerp.app.ui.DueScreen
 import com.messerp.app.ui.DutyScreen
 import com.messerp.app.ui.FinesScreen
@@ -78,6 +80,14 @@ class MainActivity : ComponentActivity() {
                         Screen.TransparencyPage -> {
                             BackHandler { vm.go(Screen.Home) }
                             TransparencyScreen(vm)
+                        }
+                        Screen.ChatListPage -> {
+                            BackHandler { vm.go(Screen.Home) }
+                            ChatListScreen(vm)
+                        }
+                        Screen.ChatPage -> {
+                            BackHandler { vm.openChatList() }
+                            ChatScreen(vm)
                         }
                         Screen.RicePage -> {
                             BackHandler { vm.go(Screen.Home) }
