@@ -25,6 +25,9 @@ import com.messerp.app.data.Notifier
 import com.messerp.app.data.NotifyScheduler
 import com.messerp.app.data.Push
 import com.messerp.app.data.PushRepository
+import com.messerp.app.data.AdminToolsRepository
+import com.messerp.app.data.AuditAction
+import com.messerp.app.data.AuditRow
 import com.messerp.app.data.AvatarRepository
 import com.messerp.app.data.CashBook
 import com.messerp.app.data.ChatMessage
@@ -98,6 +101,8 @@ sealed interface Screen {
     data object FinesPage : Screen
     data object ChatListPage : Screen
     data object ChatPage : Screen
+    data object AuditPage : Screen
+    data object ChangePasswordPage : Screen
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -115,6 +120,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val dutyIdem = Idem()
     private val riceRepo = RiceFineRepository(auth)
     private val chatRepo = ChatRepository(auth)
+    private val toolsRepo = AdminToolsRepository(auth)
     private val chatStore = ChatStore(app)
     private var chatJob: Job? = null
     private var chatSince: Long? = null
@@ -211,6 +217,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var conversations by mutableStateOf<List<Conversation>>(emptyList())
         private set
+    var auditRows by mutableStateOf<List<AuditRow>>(emptyList())
+        private set
+    var auditActions by mutableStateOf<List<AuditAction>>(emptyList())
+        private set
+    var auditFilter by mutableStateOf<String?>(null)
+        private set
+    var auditHasMore by mutableStateOf(false)
+        private set
+    val needsPasswordChange: Boolean get() = profile?.mustChangePassword == true
     var currentConv by mutableStateOf<Conversation?>(null)
         private set
     var chatMessages by mutableStateOf<List<ChatMessage>>(emptyList())
@@ -905,6 +920,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         myDuties = emptyList()
         adminDuties = emptyList()
         conversations = emptyList()
+        auditRows = emptyList()
+        auditActions = emptyList()
+        auditFilter = null
+        auditHasMore = false
         currentConv = null
         chatMessages = emptyList()
         chatReads = emptyList()
@@ -1508,6 +1527,68 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 // Typing is only a hint.
             }
+        }
+    }
+
+    // ---------- Admin tools ----------
+    fun openChangePassword() {
+        go(Screen.ChangePasswordPage)
+    }
+
+    fun changePassword(current: String, newPassword: String, confirm: String) {
+        val p = profile ?: return
+        if (current.isEmpty()) return error("বর্তমান পাসওয়ার্ড লিখুন।")
+        if (!Validators.isValidPassword(newPassword)) return error("নতুন পাসওয়ার্ড কমপক্ষে ৮ অক্ষরের হতে হবে।")
+        if (newPassword.length > 72) return error("পাসওয়ার্ড সর্বোচ্চ ৭২ অক্ষরের হতে পারে।")
+        if (newPassword != confirm) return error("নতুন পাসওয়ার্ড ও আবার লেখাটি মেলেনি।")
+        if (newPassword == current) return error("নতুন পাসওয়ার্ড আগেরটার চেয়ে আলাদা হতে হবে।")
+        launchSafe {
+            auth.changePassword(p.phone, current, newPassword)
+            val wasForced = profile?.mustChangePassword == true
+            profile = profile?.copy(mustChangePassword = false)
+            if (wasForced) go(Screen.Home) else go(Screen.ProfileScreen)
+            note("পাসওয়ার্ড বদলানো হয়েছে।")
+        }
+    }
+
+    fun resetMemberPassword(targetId: String, password: String, reason: String) {
+        if (password.length < 8 || password.length > 72) return error("অস্থায়ী পাসওয়ার্ড ৮ থেকে ৭২ অক্ষরের হতে হবে।")
+        launchSafe {
+            toolsRepo.resetPassword(targetId, password, reason)
+            note("পাসওয়ার্ড রিসেট হয়েছে। সদস্যকে অস্থায়ী পাসওয়ার্ড নিজে জানান। তিনি প্রথম লগইনে নতুন পাসওয়ার্ড বানাবেন।")
+        }
+    }
+
+    fun updateMemberInfo(targetId: String, room: String, seat: String, joinDate: String) {
+        if (room.isBlank() || seat.isBlank()) return error("রুম ও সিট নম্বর লিখুন।")
+        if (room.trim().length > 20 || seat.trim().length > 20) return error("রুম বা সিট নম্বর খুব বড়।")
+        launchSafe {
+            toolsRepo.updateMember(targetId, room, seat, joinDate)
+            members = admin.listMembers()
+            note("সদস্যের তথ্য সংরক্ষিত হয়েছে।")
+        }
+    }
+
+    fun openAudit() {
+        auditFilter = null
+        auditRows = emptyList()
+        go(Screen.AuditPage)
+    }
+
+    fun setAuditFilter(action: String?) {
+        auditFilter = action
+        loadAudit(reset = true)
+    }
+
+    fun loadAudit(reset: Boolean) {
+        launchSafe {
+            if (reset) {
+                auditActions = toolsRepo.auditActions()
+                auditRows = emptyList()
+            }
+            val page = toolsRepo.auditLogs(if (reset) null else auditRows.lastOrNull()?.id, auditFilter, 30)
+            auditRows = if (reset) page else auditRows + page
+            auditHasMore = page.size >= 30
         }
     }
 }

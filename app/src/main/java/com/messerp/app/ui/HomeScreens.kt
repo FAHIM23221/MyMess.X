@@ -251,6 +251,8 @@ fun ControlRow(title: String, onClick: () -> Unit) {
 fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
     val soon = { vm.comingSoon() }
     var pending by remember { mutableStateOf<Pending?>(null) }
+    var resetFor by remember { mutableStateOf<Profile?>(null) }
+    var editFor by remember { mutableStateOf<Profile?>(null) }
     val active = vm.members.count { it.isActive }
 
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -322,9 +324,9 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
         }
         SectionTitle("নিয়ন্ত্রণ")
         ReadyRow("ম্যানেজার ও নোটিশের অনুমতি") { vm.openManagers() }
-        ControlRow("বকেয়ার সীমা ও মিল নীতি", soon)
+        ReadyRow("বকেয়ার সীমা ও মিল নীতি") { vm.openDue() }
         ReadyRow("ম্যানেজার রোটেশন") { vm.openRotation() }
-        ControlRow("অডিট লগ", soon)
+        ReadyRow("অডিট লগ") { vm.openAudit() }
         ControlRow("CSV রিপোর্ট", soon)
         ControlRow("নিরাপত্তা সেটিংস", soon)
     } else {
@@ -356,6 +358,13 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
                 StatusChip(roleLabel(m.role), positive = m.role != Role.MEMBER)
                 StatusChip(if (m.isActive) "সক্রিয়" else "স্থগিত", positive = m.isActive)
             }
+            val canReset = m.id != me.id && m.role != Role.MAIN_ADMIN && (isMain || m.role == Role.MEMBER)
+            if (canReset || m.role == Role.MEMBER) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (m.role == Role.MEMBER) OutlinedButton(onClick = { editFor = m }) { Text("রুম/সিট সম্পাদনা") }
+                    if (canReset) OutlinedButton(onClick = { resetFor = m }) { Text("পাসওয়ার্ড রিসেট") }
+                }
+            }
             val canStatus = m.id != me.id && m.role != Role.MAIN_ADMIN && (isMain || m.role == Role.MEMBER)
             val canRole = isMain && m.id != me.id && m.role != Role.MAIN_ADMIN
             if (canStatus || canRole) {
@@ -376,6 +385,9 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
             }
         }
     }
+
+    resetFor?.let { t -> ResetPasswordDialog(vm, t) { resetFor = null } }
+    editFor?.let { t -> EditMemberDialog(vm, t) { editFor = null } }
 
     pending?.let { act ->
         var reason by rememberSaveable { mutableStateOf("") }
@@ -450,6 +462,7 @@ fun ProfileScreen(vm: AppViewModel) {
         MessageText(vm)
         PrimaryButton("তথ্য সংরক্ষণ", !vm.busy) { vm.saveProfile(name, fatherName, fatherPhone, motherName, motherPhone) }
         SectionTitle("সেটিংস")
+        ReadyRow("পাসওয়ার্ড বদল") { vm.openChangePassword() }
         ControlRow("ভাষা (বাংলা / English)") { vm.comingSoon() }
         ControlRow("থিম") { vm.comingSoon() }
         OutlinedButton(

@@ -104,6 +104,25 @@ class AuthRepository(private val store: SessionStore) {
         return parseProfile(arr.getJSONObject(0))
     }
 
+    /** Checks the current password first (a fresh sign-in), then sets the new one. */
+    suspend fun changePassword(phone: String, current: String, new: String) {
+        try {
+            signIn(phone, current)
+        } catch (e: AuthException) {
+            throw AuthException("বর্তমান পাসওয়ার্ড ভুল।")
+        }
+        val res = SupabaseHttp.request("PUT", "/auth/v1/user", JSONObject().put("password", new).toString(), accessToken())
+        if (res.code !in 200..299) {
+            val same = res.body.contains("same_password") || res.body.contains("different from the old")
+            throw AuthException(if (same) "নতুন পাসওয়ার্ড আগেরটার চেয়ে আলাদা হতে হবে।" else "পাসওয়ার্ড বদলানো যায়নি। আবার চেষ্টা করুন।")
+        }
+        try {
+            SupabaseHttp.request("POST", "/rest/v1/rpc/password_changed", "{}", accessToken())
+        } catch (e: Exception) {
+            // The password is already changed; the reminder flag is cleared on the next successful call.
+        }
+    }
+
     suspend fun signOut() {
         val token = store.load()?.access
         if (token != null) {

@@ -18,7 +18,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.messerp.app.data.Notifier
 import com.messerp.app.ui.AppViewModel
 import com.messerp.app.ui.NotificationsScreen
+import com.messerp.app.ui.AuditScreen
 import com.messerp.app.ui.BillsScreen
+import com.messerp.app.ui.ChangePasswordScreen
 import com.messerp.app.ui.CashBookScreen
 import com.messerp.app.ui.ChatListScreen
 import com.messerp.app.ui.ChatScreen
@@ -57,7 +59,10 @@ class MainActivity : ComponentActivity() {
             }
             MessTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    when (vm.screen) {
+                    val publicScreens = setOf(Screen.Splash, Screen.Login, Screen.AdminLogin, Screen.Register)
+                    if (vm.needsPasswordChange && vm.screen !in publicScreens) {
+                        ChangePasswordScreen(vm, forced = true)
+                    } else when (vm.screen) {
                         Screen.Splash -> SplashScreen(vm)
                         Screen.Login -> LoginScreen(vm, adminMode = false)
                         Screen.AdminLogin -> {
@@ -80,6 +85,14 @@ class MainActivity : ComponentActivity() {
                         Screen.TransparencyPage -> {
                             BackHandler { vm.go(Screen.Home) }
                             TransparencyScreen(vm)
+                        }
+                        Screen.AuditPage -> {
+                            BackHandler { vm.go(Screen.Home) }
+                            AuditScreen(vm)
+                        }
+                        Screen.ChangePasswordPage -> {
+                            BackHandler { vm.go(Screen.ProfileScreen) }
+                            ChangePasswordScreen(vm, forced = false)
                         }
                         Screen.ChatListPage -> {
                             BackHandler { vm.go(Screen.Home) }

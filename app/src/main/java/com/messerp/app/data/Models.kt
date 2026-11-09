@@ -20,7 +20,8 @@ data class Profile(
     val fatherPhone: String? = null,
     val motherName: String? = null,
     val motherPhone: String? = null,
-    val guardianWaived: Boolean = false
+    val guardianWaived: Boolean = false,
+    val mustChangePassword: Boolean = false
 ) {
     val isActive: Boolean get() = status == "ACTIVE"
 }
@@ -44,5 +45,6 @@ fun parseProfile(o: JSONObject): Profile = Profile(
     fatherPhone = o.strOrNull("father_phone"),
     motherName = o.strOrNull("mother_name"),
     motherPhone = o.strOrNull("mother_phone"),
-    guardianWaived = o.optBoolean("guardian_waived", false)
+    guardianWaived = o.optBoolean("guardian_waived", false),
+    mustChangePassword = o.optBoolean("must_change_password", false)
 )
