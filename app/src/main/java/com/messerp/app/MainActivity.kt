@@ -31,6 +31,7 @@ import com.messerp.app.ui.RiceScreen
 import com.messerp.app.ui.RotationScreen
 import com.messerp.app.ui.TransparencyScreen
 import com.messerp.app.ui.ExpensesScreen
+import com.messerp.app.ui.FeedbackScreen
 import com.messerp.app.ui.FinanceScreen
 import com.messerp.app.ui.HomeScreen
 import com.messerp.app.ui.LoginScreen
@@ -85,6 +86,10 @@ class MainActivity : ComponentActivity() {
                         Screen.TransparencyPage -> {
                             BackHandler { vm.go(Screen.Home) }
                             TransparencyScreen(vm)
+                        }
+                        Screen.FeedbackPage -> {
+                            BackHandler { vm.go(Screen.Home) }
+                            FeedbackScreen(vm)
                         }
                         Screen.AuditPage -> {
                             BackHandler { vm.go(Screen.Home) }

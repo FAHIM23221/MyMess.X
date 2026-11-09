@@ -25,7 +25,13 @@ import com.messerp.app.data.Notifier
 import com.messerp.app.data.NotifyScheduler
 import com.messerp.app.data.Push
 import com.messerp.app.data.PushRepository
+import com.messerp.app.data.AdminFeedback
 import com.messerp.app.data.AdminToolsRepository
+import com.messerp.app.data.FeedbackItem
+import com.messerp.app.data.FeedbackRepository
+import com.messerp.app.data.FeedbackStore
+import com.messerp.app.data.LocalFeedback
+import com.messerp.app.data.sha256Hex
 import com.messerp.app.data.AuditAction
 import com.messerp.app.data.AuditRow
 import com.messerp.app.data.AvatarRepository
@@ -102,6 +108,7 @@ sealed interface Screen {
     data object ChatListPage : Screen
     data object ChatPage : Screen
     data object AuditPage : Screen
+    data object FeedbackPage : Screen
     data object ChangePasswordPage : Screen
 }
 
@@ -121,6 +128,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val riceRepo = RiceFineRepository(auth)
     private val chatRepo = ChatRepository(auth)
     private val toolsRepo = AdminToolsRepository(auth)
+    private val feedbackRepo = FeedbackRepository(auth)
+    private val feedbackStore = FeedbackStore(app)
+    private val feedbackIdem = Idem()
     private val chatStore = ChatStore(app)
     private var chatJob: Job? = null
     private var chatSince: Long? = null
@@ -216,6 +226,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var myFines by mutableStateOf<List<Fine>>(emptyList())
         private set
     var conversations by mutableStateOf<List<Conversation>>(emptyList())
+        private set
+    var myFeedback by mutableStateOf<List<FeedbackItem>>(emptyList())
+        private set
+    var adminFeedback by mutableStateOf<List<AdminFeedback>>(emptyList())
+        private set
+    var feedbackFilter by mutableStateOf<String?>(null)
         private set
     var auditRows by mutableStateOf<List<AuditRow>>(emptyList())
         private set
@@ -440,7 +456,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             val chatUid = profile?.id
             auth.signOut()
-            if (chatUid != null) chatStore.clearUser(chatUid)
+            if (chatUid != null) {
+                chatStore.clearUser(chatUid)
+                feedbackStore.clearUser(chatUid)
+            }
             profile = null
             members = emptyList()
             lastInvite = null
@@ -920,6 +939,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         myDuties = emptyList()
         adminDuties = emptyList()
         conversations = emptyList()
+        myFeedback = emptyList()
+        adminFeedback = emptyList()
+        feedbackFilter = null
         auditRows = emptyList()
         auditActions = emptyList()
         auditFilter = null
@@ -1589,6 +1611,65 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val page = toolsRepo.auditLogs(if (reset) null else auditRows.lastOrNull()?.id, auditFilter, 30)
             auditRows = if (reset) page else auditRows + page
             auditHasMore = page.size >= 30
+        }
+    }
+
+    // ---------- Anonymous suggestions and complaints ----------
+    fun openFeedback() {
+        feedbackFilter = null
+        go(Screen.FeedbackPage)
+    }
+
+    fun loadFeedback() {
+        launchSafe {
+            if (profile?.role == Role.MEMBER) {
+                val local = feedbackStore.load(uid())
+                val server = feedbackRepo.mine(local.map { sha256Hex(it.key) })
+                // Show what is known from the server; entries the server has not confirmed yet come from this phone.
+                myFeedback = local.sortedByDescending { it.createdMs }.map { l ->
+                    server.firstOrNull { it.tokenHash == sha256Hex(l.key) }
+                        ?: FeedbackItem(sha256Hex(l.key), l.kind, l.topic, l.body, "NEW", null, Dates.todayDhaka())
+                }
+            } else {
+                adminFeedback = feedbackRepo.admin(feedbackFilter)
+            }
+        }
+    }
+
+    fun setFeedbackFilter(status: String?) {
+        feedbackFilter = status
+        loadFeedback()
+    }
+
+    fun submitFeedback(kind: String, topic: String, body: String) {
+        val text = body.trim()
+        if (text.length < 10) return error("লেখা কমপক্ষে ১০ অক্ষরের হতে হবে।")
+        if (text.length > 1000) return error("লেখা সর্বোচ্চ ১০০০ অক্ষরের হতে পারে।")
+        // The same text resent after a bad connection reuses the same secret key, so it is never stored twice.
+        val key = feedbackIdem.idFor("$kind|$topic|$text")
+        launchSafe {
+            feedbackRepo.submit(kind, topic, text, sha256Hex(key))
+            feedbackStore.add(uid(), LocalFeedback(key, kind, topic, text, System.currentTimeMillis()))
+            feedbackIdem.clear()
+            formVersion++
+            loadFeedback()
+            note("আপনার লেখা নামহীনভাবে পাঠানো হয়েছে।")
+        }
+    }
+
+    fun respondFeedback(id: String, status: String, response: String) {
+        launchSafe {
+            feedbackRepo.respond(id, status, response)
+            adminFeedback = feedbackRepo.admin(feedbackFilter)
+            note("সংরক্ষিত হয়েছে।")
+        }
+    }
+
+    fun hideFeedback(id: String, reason: String) {
+        launchSafe {
+            feedbackRepo.hide(id, reason)
+            adminFeedback = feedbackRepo.admin(feedbackFilter)
+            note("লেখাটি সরানো হয়েছে।")
         }
     }
 }

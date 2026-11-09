@@ -70,6 +70,8 @@ fun auditLabel(a: String) = when (a) {
     "FINE_PAY" -> "জরিমানা পরিশোধ"
     "FINE_VOID" -> "জরিমানা বাতিল"
     "MESSAGE_DELETE_MOD" -> "বার্তা মুছেছেন (মডারেশন)"
+    "FEEDBACK_RESPOND" -> "পরামর্শ/অভিযোগের উত্তর"
+    "FEEDBACK_HIDE" -> "পরামর্শ/অভিযোগ সরানো"
     else -> a
 }
 
