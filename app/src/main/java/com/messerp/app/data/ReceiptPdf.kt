@@ -106,12 +106,12 @@ object ReceiptPdf {
     }
 
     /** One-click save into the Downloads folder. Works on Android 10 and newer. Returns false otherwise. */
-    fun saveToDownloads(context: Context, name: String, bytes: ByteArray): Boolean {
+    fun saveToDownloads(context: Context, name: String, bytes: ByteArray, mime: String = "application/pdf"): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
         val resolver = context.contentResolver
         val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, name)
-            put(MediaStore.Downloads.MIME_TYPE, "application/pdf")
+            put(MediaStore.Downloads.MIME_TYPE, mime)
             put(MediaStore.Downloads.IS_PENDING, 1)
         }
         val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return false

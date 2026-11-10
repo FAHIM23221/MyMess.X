@@ -35,8 +35,9 @@ class MealRepository(private val auth: AuthRepository) {
         return parseMealStatus(JSONObject(res.body))
     }
 
-    suspend fun summary(): MealSummary {
-        val res = call("POST", "/rest/v1/rpc/get_meal_summary", "{}")
+    suspend fun summary(month: String? = null): MealSummary {
+        val body = JSONObject().apply { if (month != null) put("p_month", month) }.toString()
+        val res = call("POST", "/rest/v1/rpc/get_meal_summary", body)
         if (res.code !in 200..299) fail(res)
         return parseMealSummary(JSONObject(res.body))
     }

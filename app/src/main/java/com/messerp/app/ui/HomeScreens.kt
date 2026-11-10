@@ -288,6 +288,7 @@ fun AdminContent(vm: AppViewModel, me: Profile, isMain: Boolean) {
     tiles.add(Tile("চালের হিসাব", true) { vm.openRice() })
     tiles.add(Tile("জরিমানা", true) { vm.openFines() })
     tiles.add(Tile("পরামর্শ ও অভিযোগ", true) { vm.openFeedback() })
+    tiles.add(Tile("রিপোর্ট ও CSV", true) { vm.openReports() })
     tiles.add(Tile("বাজার খরচ ও গেস্ট মিল", true) { vm.go(Screen.Expenses) })
     tiles.add(Tile("মিল ও রেট", true) { vm.go(Screen.Meal) })
     tiles.add(Tile("নোটিশ দিন", true) { vm.go(Screen.Notifications) })
@@ -466,7 +467,12 @@ fun ProfileScreen(vm: AppViewModel) {
         SectionTitle("সেটিংস")
         ReadyRow("পাসওয়ার্ড বদল") { vm.openChangePassword() }
         ControlRow("ভাষা (বাংলা / English)") { vm.comingSoon() }
-        ControlRow("থিম") { vm.comingSoon() }
+        Text("থিম", fontWeight = FontWeight.SemiBold)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ChoiceChip("ফোন অনুযায়ী", vm.themeMode == "SYSTEM") { vm.setThemeMode("SYSTEM") }
+            ChoiceChip("হালকা", vm.themeMode == "LIGHT") { vm.setThemeMode("LIGHT") }
+            ChoiceChip("গাঢ়", vm.themeMode == "DARK") { vm.setThemeMode("DARK") }
+        }
         OutlinedButton(
             onClick = { vm.logout() },
             shape = RoundedCornerShape(12.dp),

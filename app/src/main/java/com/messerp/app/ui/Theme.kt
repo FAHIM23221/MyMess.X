@@ -10,38 +10,33 @@ import androidx.compose.ui.graphics.Color
 private val Light = lightColorScheme(
     primary = Color(0xFF1F7A4D),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFDFF3E6),
-    onPrimaryContainer = Color(0xFF14532D),
-    secondary = Color(0xFF2563A8),
     background = Color(0xFFF4F7F3),
-    onBackground = Color(0xFF12261C),
-    surface = Color.White,
-    onSurface = Color(0xFF12261C),
-    surfaceVariant = Color(0xFFE6EFE9),
-    onSurfaceVariant = Color(0xFF4B5B52),
-    outline = Color(0xFF9DB0A5),
-    outlineVariant = Color(0xFFDDE6DF),
-    error = Color(0xFFB42318)
+    surface = Color.White
 )
 
 private val Dark = darkColorScheme(
     primary = Color(0xFF4CC38A),
     onPrimary = Color(0xFF00210F),
-    primaryContainer = Color(0xFF14532D),
-    onPrimaryContainer = Color(0xFFBDF0D3),
-    secondary = Color(0xFF8DB8E8),
     background = Color(0xFF0F1A14),
-    onBackground = Color(0xFFE6F0EA),
     surface = Color(0xFF17261D),
-    onSurface = Color(0xFFE6F0EA),
-    surfaceVariant = Color(0xFF22362A),
-    onSurfaceVariant = Color(0xFFA9BCB0),
-    outline = Color(0xFF5E7A6A),
-    outlineVariant = Color(0xFF2A3D32),
-    error = Color(0xFFFF8A80)
+    onBackground = Color(0xFFE3EDE6),
+    onSurface = Color(0xFFE3EDE6),
+    primaryContainer = Color(0xFF1F4D36),
+    onPrimaryContainer = Color(0xFFBFF0D5),
+    surfaceVariant = Color(0xFF22352A),
+    onSurfaceVariant = Color(0xFFB6C9BD),
+    error = Color(0xFFFFB4AB),
+    errorContainer = Color(0xFF5A1F1F),
+    onErrorContainer = Color(0xFFFFDAD6)
 )
 
+/** mode: "SYSTEM" follows the phone, "LIGHT" and "DARK" force one look. */
 @Composable
-fun MessTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) Dark else Light, content = content)
+fun MessTheme(mode: String = "SYSTEM", content: @Composable () -> Unit) {
+    val dark = when (mode) {
+        "DARK" -> true
+        "LIGHT" -> false
+        else -> isSystemInDarkTheme()
+    }
+    MaterialTheme(colorScheme = if (dark) Dark else Light, content = content)
 }

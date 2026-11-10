@@ -64,6 +64,7 @@ import com.messerp.app.data.MemberLedger
 import com.messerp.app.data.Fine
 import com.messerp.app.data.MemberRice
 import com.messerp.app.data.PaymentRow
+import com.messerp.app.data.ReportCsv
 import com.messerp.app.data.RiceFineRepository
 import com.messerp.app.data.RiceSummary
 import com.messerp.app.data.Weight
@@ -109,6 +110,7 @@ sealed interface Screen {
     data object ChatPage : Screen
     data object AuditPage : Screen
     data object FeedbackPage : Screen
+    data object ReportPage : Screen
     data object ChangePasswordPage : Screen
 }
 
@@ -125,6 +127,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val dueRepo = DueRepository(auth)
     private val dutyRepo = DutyRepository(auth)
     private val dutyIdem = Idem()
+    private val settingsPrefs = app.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE)
+    var themeMode by mutableStateOf(settingsPrefs.getString("theme_mode", "SYSTEM") ?: "SYSTEM")
+        private set
     private val riceRepo = RiceFineRepository(auth)
     private val chatRepo = ChatRepository(auth)
     private val toolsRepo = AdminToolsRepository(auth)
@@ -227,6 +232,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var conversations by mutableStateOf<List<Conversation>>(emptyList())
         private set
+    var reportMonth by mutableStateOf("")
+        private set
     var myFeedback by mutableStateOf<List<FeedbackItem>>(emptyList())
         private set
     var adminFeedback by mutableStateOf<List<AdminFeedback>>(emptyList())
@@ -319,6 +326,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 busy = false
             }
         }
+    }
+
+    fun setThemeMode(mode: String) {
+        if (mode != "SYSTEM" && mode != "LIGHT" && mode != "DARK") return
+        themeMode = mode
+        settingsPrefs.edit().putString("theme_mode", mode).apply()
     }
 
     fun comingSoon() {
@@ -939,6 +952,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         myDuties = emptyList()
         adminDuties = emptyList()
         conversations = emptyList()
+        reportMonth = ""
         myFeedback = emptyList()
         adminFeedback = emptyList()
         feedbackFilter = null
@@ -1670,6 +1684,49 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             feedbackRepo.hide(id, reason)
             adminFeedback = feedbackRepo.admin(feedbackFilter)
             note("লেখাটি সরানো হয়েছে।")
+        }
+    }
+
+    // ---------- Reports (CSV) ----------
+    fun openReports() {
+        reportMonth = Dates.monthStart(Dates.todayDhaka())
+        go(Screen.ReportPage)
+    }
+
+    fun shiftReportMonth(delta: Int) {
+        if (reportMonth.isEmpty()) return
+        reportMonth = Dates.addMonths(reportMonth, delta)
+    }
+
+    fun exportReport(kind: String, share: Boolean) {
+        if (profile?.role == Role.MEMBER) return
+        val month = reportMonth.ifEmpty { Dates.monthStart(Dates.todayDhaka()) }
+        launchSafe {
+            toolsRepo.logReportExport(kind, month)
+            val pair: Pair<String, ByteArray> = when (kind) {
+                "MEMBERS" -> Pair(
+                    "members",
+                    ReportCsv.members(meals.summary(month), ledgerRepo.dues("MESS"), ledgerRepo.dues("UTILITY"), riceRepo.riceSummary(month))
+                )
+                "CASH_MESS" -> Pair("cashbook-mess", ReportCsv.cashBook(tpRepo.cashBook("MESS", month), "মেস খাতা"))
+                "CASH_UTILITY" -> Pair("cashbook-utility", ReportCsv.cashBook(tpRepo.cashBook("UTILITY", month), "বিদ্যুৎ ও রাঁধুনি বিল"))
+                else -> Pair("fines", ReportCsv.fines(riceRepo.adminFines()))
+            }
+            val file = "mess-" + pair.first + "-" + month.take(7) + ".csv"
+            val app = getApplication<Application>()
+            if (share) {
+                val uri = withContext(Dispatchers.IO) { ReceiptPdf.cacheUri(app, file, pair.second) }
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/csv"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                app.startActivity(Intent.createChooser(send, "রিপোর্ট শেয়ার করুন").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+            } else {
+                val saved = withContext(Dispatchers.IO) { ReceiptPdf.saveToDownloads(app, file, pair.second, "text/csv") }
+                if (saved) note("রিপোর্ট Downloads ফোল্ডারে সংরক্ষিত হয়েছে: $file")
+                else error("এই Android সংস্করণে সরাসরি সংরক্ষণ সম্ভব নয়। শেয়ার বাটন ব্যবহার করুন।")
+            }
         }
     }
 }

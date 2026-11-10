@@ -27,6 +27,7 @@ import com.messerp.app.ui.ChatScreen
 import com.messerp.app.ui.DueScreen
 import com.messerp.app.ui.DutyScreen
 import com.messerp.app.ui.FinesScreen
+import com.messerp.app.ui.ReportScreen
 import com.messerp.app.ui.RiceScreen
 import com.messerp.app.ui.RotationScreen
 import com.messerp.app.ui.TransparencyScreen
@@ -58,7 +59,7 @@ class MainActivity : ComponentActivity() {
                     notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
             }
-            MessTheme {
+            MessTheme(vm.themeMode) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     val publicScreens = setOf(Screen.Splash, Screen.Login, Screen.AdminLogin, Screen.Register)
                     if (vm.needsPasswordChange && vm.screen !in publicScreens) {
@@ -86,6 +87,10 @@ class MainActivity : ComponentActivity() {
                         Screen.TransparencyPage -> {
                             BackHandler { vm.go(Screen.Home) }
                             TransparencyScreen(vm)
+                        }
+                        Screen.ReportPage -> {
+                            BackHandler { vm.go(Screen.Home) }
+                            ReportScreen(vm)
                         }
                         Screen.FeedbackPage -> {
                             BackHandler { vm.go(Screen.Home) }

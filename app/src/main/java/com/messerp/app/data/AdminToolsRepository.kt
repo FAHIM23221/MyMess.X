@@ -48,6 +48,12 @@ class AdminToolsRepository(private val auth: AuthRepository) {
         if (res.code !in 200..299) fail(res)
     }
 
+    /** Every export is recorded in the audit log first; without that record nothing is exported. */
+    suspend fun logReportExport(kind: String, month: String) {
+        val res = call("/rest/v1/rpc/log_report_export", JSONObject().put("p_kind", kind).put("p_month", month).toString())
+        if (res.code !in 200..299) fail(res)
+    }
+
     suspend fun auditActions(): List<AuditAction> {
         val res = call("/rest/v1/rpc/get_audit_actions", "{}")
         if (res.code !in 200..299) fail(res)
