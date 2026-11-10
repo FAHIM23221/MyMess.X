@@ -167,12 +167,12 @@ fun AuditScreen(vm: AppViewModel) {
         MessageText(vm)
         Text("কে, কখন, কী করেছেন তার স্থায়ী রেকর্ড। এখান থেকে কিছু মোছা বা বদলানো যায় না।", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ChoiceChip("সব", vm.auditFilter == null) { vm.setAuditFilter(null) }
+            ChoiceChip("সব", vm.auditFilter == null) { vm.filterAudit(null) }
         }
         vm.auditActions.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 2.dp)) {
                 row.forEach { a ->
-                    ChoiceChip(auditLabel(a.action) + " (" + Money.bn(a.count.toString()) + ")", vm.auditFilter == a.action) { vm.setAuditFilter(a.action) }
+                    ChoiceChip(auditLabel(a.action) + " (" + Money.bn(a.count.toString()) + ")", vm.auditFilter == a.action) { vm.filterAudit(a.action) }
                 }
             }
         }

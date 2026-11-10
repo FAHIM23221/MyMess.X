@@ -113,9 +113,9 @@ private fun AdminFeedbackView(vm: AppViewModel) {
     AppScaffold(vm, 0, "পরামর্শ ও অভিযোগ", "অ্যাডমিন, লেখকের পরিচয় অজানা") {
         MessageText(vm)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ChoiceChip("সব", vm.feedbackFilter == null) { vm.setFeedbackFilter(null) }
-            ChoiceChip("নতুন", vm.feedbackFilter == "NEW") { vm.setFeedbackFilter("NEW") }
-            ChoiceChip("সমাধান", vm.feedbackFilter == "RESOLVED") { vm.setFeedbackFilter("RESOLVED") }
+            ChoiceChip("সব", vm.feedbackFilter == null) { vm.filterFeedback(null) }
+            ChoiceChip("নতুন", vm.feedbackFilter == "NEW") { vm.filterFeedback("NEW") }
+            ChoiceChip("সমাধান", vm.feedbackFilter == "RESOLVED") { vm.filterFeedback("RESOLVED") }
         }
         if (vm.adminFeedback.isEmpty()) Text("কোনো লেখা নেই।", color = MaterialTheme.colorScheme.onSurfaceVariant)
         vm.adminFeedback.forEach { f ->

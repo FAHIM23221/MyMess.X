@@ -469,9 +469,9 @@ fun ProfileScreen(vm: AppViewModel) {
         ControlRow("ভাষা (বাংলা / English)") { vm.comingSoon() }
         Text("থিম", fontWeight = FontWeight.SemiBold)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ChoiceChip("ফোন অনুযায়ী", vm.themeMode == "SYSTEM") { vm.setThemeMode("SYSTEM") }
-            ChoiceChip("হালকা", vm.themeMode == "LIGHT") { vm.setThemeMode("LIGHT") }
-            ChoiceChip("গাঢ়", vm.themeMode == "DARK") { vm.setThemeMode("DARK") }
+            ChoiceChip("ফোন অনুযায়ী", vm.themeMode == "SYSTEM") { vm.chooseTheme("SYSTEM") }
+            ChoiceChip("হালকা", vm.themeMode == "LIGHT") { vm.chooseTheme("LIGHT") }
+            ChoiceChip("গাঢ়", vm.themeMode == "DARK") { vm.chooseTheme("DARK") }
         }
         OutlinedButton(
             onClick = { vm.logout() },

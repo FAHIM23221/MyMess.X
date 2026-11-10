@@ -328,7 +328,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun setThemeMode(mode: String) {
+    fun chooseTheme(mode: String) {
         if (mode != "SYSTEM" && mode != "LIGHT" && mode != "DARK") return
         themeMode = mode
         settingsPrefs.edit().putString("theme_mode", mode).apply()
@@ -1611,7 +1611,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         go(Screen.AuditPage)
     }
 
-    fun setAuditFilter(action: String?) {
+    fun filterAudit(action: String?) {
         auditFilter = action
         loadAudit(reset = true)
     }
@@ -1650,7 +1650,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun setFeedbackFilter(status: String?) {
+    fun filterFeedback(status: String?) {
         feedbackFilter = status
         loadFeedback()
     }
